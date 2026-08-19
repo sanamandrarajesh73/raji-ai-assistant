@@ -1,5 +1,5 @@
-from flask import Flask, request, jsonify
-import requests
+from flask import Flask, request, Response
+import json
 import os
 
 app = Flask(__name__)
@@ -15,9 +15,12 @@ def chat():
     
     # Simple Response Logic
     reply = f"హలో! మీ మెసేజ్ అందింది: {user_message}"
-    return jsonify({"response": reply})
+    
+    # ensure_ascii=False వల్ల తెలుగు అక్షరాలు విడిపోకుండా స్పష్టంగా వస్తాయి
+    return Response(json.dumps({"response": reply}, ensure_ascii=False), mimetype='application/json')
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
+    
   
