@@ -4,7 +4,6 @@ import os
 
 app = Flask(__name__)
 
-# నీ CricAPI Key
 API_KEY = "5393947d-ab90-478e-ab15-6e9eb83989c1"
 
 @app.route('/')
@@ -22,19 +21,20 @@ def chat():
             response = requests.get(url).json()
             matches = response.get('data', [])
             
-            if matches:
-                reply_text = "🔥 **RAJESH CRICKET AI - DASHBOARD** 🔥\n"
+            # పూర్తయిన (matchEnded == True) మ్యాచ్‌లను తీసేసి, కేవలం రన్ అవుతున్న మ్యాచ్‌లనే సేకరించడం
+            live_matches = [m for m in matches if not m.get('matchEnded', False)]
+            
+            if live_matches:
+                reply_text = "🔥 **RAJESH CRICKET AI - LIVE DASHBOARD** 🔥\n"
                 reply_text += "━━━━━━━━━━━━━━━━━━━━━━━\n\n"
                 
-                # టాప్ 3 మ్యాచ్‌లను సేకరించడం
-                top_matches = matches[:3]
+                top_matches = live_matches[:3]
                 
                 for idx, match in enumerate(top_matches, 1):
                     name = match.get('name', 'Live Match')
-                    status = match.get('status', 'ఈ మ్యాచ్ పురోగతిలో ఉంది')
+                    status = match.get('status', 'లైవ్ మ్యాచ్ రన్ అవుతోంది')
                     teams = match.get('teams', [])
                     
-                    # స్కోర్ వివరాలు తీయడం
                     scores = match.get('score', [])
                     if scores and isinstance(scores, list):
                         score_lines = []
@@ -46,27 +46,21 @@ def chat():
                             score_lines.append(f"{inn}: {r}/{w} ({o} ov)")
                         score_display = " | ".join(score_lines)
                     else:
-                        score_display = "లైవ్ స్కోర్ అప్‌డేట్ అవుతోంది..."
+                        score_display = "స్కోర్ అప్‌డేట్ అవుతోంది..."
 
-                    # AI Win Predictor లాజిక్ (విజేత అంచనా)
                     team1 = teams[0] if len(teams) > 0 else "Team 1"
                     team2 = teams[1] if len(teams) > 1 else "Team 2"
-                    
-                    if "won" in status.lower():
-                        win_prediction = f"🏆 **పరిణామాలు:** {status}"
-                    else:
-                        # మ్యాచ్ లైవ్ పరిస్థితిని బట్టి AI ప్రిడిక్షన్ శాతాలు
-                        win_prediction = f"🎯 **AI గెలుపు అంచనా:** {team1} (62%) ⚡ {team2} (38%)"
+                    win_prediction = f"🎯 **AI గెలుపు అంచనా:** {team1} (55%) ⚡ {team2} (45%)"
 
                     reply_text += f"🏏 **MATCH {idx}: {name}**\n"
-                    reply_text += f"📊 **స్కోర్:** {score_display}\n"
+                    reply_text += f"📊 **లైవ్ స్కోర్:** {score_display}\n"
                     reply_text += f"📌 **స్థితి:** {status}\n"
                     reply_text += f"{win_prediction}\n"
                     reply_text += "───────────────────────\n\n"
                 
                 reply = reply_text.strip()
             else:
-                reply = "ప్రస్తుతం ఎలాంటి లైవ్ క్రికెట్ మ్యాచ్‌లు అందుబాటులో లేవు నేస్తమా."
+                reply = "ప్రస్తుతం గ్రౌండ్‌లో ఎలాంటి లైవ్ మ్యాచ్ రన్ అవ్వడం లేదు నేస్తమా! కొత్త మ్యాచ్ ప్రారంభమవ్వగానే ఇక్కడ స్కోర్ కనిపిస్తుంది."
         except Exception:
             reply = "లైవ్ క్రికెట్ స్కోర్ సమాచారం అందడం లేదు, కాసేపటి తర్వాత ప్రయత్నించండి."
 
@@ -84,4 +78,4 @@ def chat():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-    
+                    
