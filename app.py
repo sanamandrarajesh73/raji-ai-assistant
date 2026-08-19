@@ -4,7 +4,7 @@ import os
 
 app = Flask(__name__)
 
-# నీ నిజమైన Cricket API Key
+# నీ Cricket API Key
 API_KEY = "5393947d-ab90-478e-ab15-6e9eb83989c1"
 
 @app.route('/')
@@ -16,7 +16,7 @@ def chat():
     data = request.get_json() or {}
     user_message = str(data.get('message', '')).lower()
     
-    # లైవ్ క్రికెట్ స్కోర్ లాజిక్
+    # లైవ్ క్రికెట్ మల్టీ-మ్యాచ్ లాజిక్
     if 'cricket' in user_message or 'క్రికెట్' in user_message:
         try:
             url = f"https://api.cricapi.com/v1/currentMatches?apikey={API_KEY}&offset=0"
@@ -24,11 +24,17 @@ def chat():
             matches = response.get('data', [])
             
             if matches:
-                match = matches[0]
-                name = match.get('name', 'Live Match')
-                status = match.get('status', 'మ్యాచ్ జరుగుతోంది')
+                reply_text = "🏏 **టాప్ లైవ్ క్రికెట్ మ్యాచ్‌లు:**\n\n"
+                # మొదటి 3 మ్యాచ్‌లను వరుసగా సేకరించడం
+                top_matches = matches[:3]
                 
-                reply = f"🏏 లైవ్ క్రికెట్:\n{name}\nస్థితి: {status}"
+                for idx, match in enumerate(top_matches, 1):
+                    name = match.get('name', 'Live Match')
+                    status = match.get('status', 'మ్యాచ్ జరుగుతోంది')
+                    
+                    reply_text += f"{idx}. {name}\n   📊 స్థితి: {status}\n\n"
+                
+                reply = reply_text.strip()
             else:
                 reply = "ప్రస్తుతం ఎలాంటి లైవ్ క్రికెట్ మ్యాచ్‌లు అందుబాటులో లేవు నేస్తమా."
         except Exception:
