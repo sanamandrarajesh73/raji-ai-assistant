@@ -1,8 +1,11 @@
 from flask import Flask, request, Response
-import json
+import requests
 import os
 
 app = Flask(__name__)
+
+# నీ నిజమైన Cricket API Key
+API_KEY = "5393947d-ab90-478e-ab15-6e9eb83989c1"
 
 @app.route('/')
 def home():
@@ -11,16 +14,37 @@ def home():
 @app.route('/chat', methods=['POST'])
 def chat():
     data = request.get_json() or {}
-    user_message = data.get('message', '')
+    user_message = str(data.get('message', '')).lower()
     
-    # Simple Response Logic
-    reply = f"హలో! మీ మెసేజ్ అందింది: {user_message}"
+    # లైవ్ క్రికెట్ స్కోర్ లాజిక్
+    if 'cricket' in user_message or 'క్రికెట్' in user_message:
+        try:
+            url = f"https://api.cricapi.com/v1/currentMatches?apikey={API_KEY}&offset=0"
+            response = requests.get(url).json()
+            matches = response.get('data', [])
+            
+            if matches:
+                match = matches[0]
+                name = match.get('name', 'Live Match')
+                status = match.get('status', 'మ్యాచ్ జరుగుతోంది')
+                
+                reply = f"🏏 లైవ్ క్రికెట్:\n{name}\nస్థితి: {status}"
+            else:
+                reply = "ప్రస్తుతం ఎలాంటి లైవ్ క్రికెట్ మ్యాచ్‌లు అందుబాటులో లేవు నేస్తమా."
+        except Exception:
+            reply = "లైవ్ క్రికెట్ స్కోర్ సమాచారం అందడం లేదు, కాసేపటి తర్వాత ప్రయత్నించండి."
+
+    elif 'tennis' in user_message or 'టెన్నిస్' in user_message:
+        reply = "🎾 టెన్నిస్ అప్‌డేట్: ప్రసిద్ధ మ్యాచ్‌ల సమాచారం ప్రాసెస్ అవుతోంది."
+    elif 'stock' in user_message or 'స్టాక్' in user_message:
+        reply = "📈 స్టాక్ మార్కెట్: మార్కెట్ ప్రస్తుతం లైవ్ ట్రేడింగ్‌లో ఉంది."
+    elif 'hi' in user_message or 'హాయ్' in user_message:
+        reply = "హలో నేస్తమా! నేను రాజి AI అసిస్టెంట్‌ని. లైవ్ స్కోర్ కోసం క్రికెట్ బటన్ నొక్కండి."
+    else:
+        reply = f"మీ ప్రశ్న: '{user_message}' అందులోని వివరాలు ప్రాసెస్ అవుతున్నాయి."
     
-    # ensure_ascii=False వల్ల తెలుగు అక్షరాలు విడిపోకుండా స్పష్టంగా వస్తాయి
-    return Response(json.dumps({"response": reply}, ensure_ascii=False), mimetype='application/json')
+    return Response(reply, mimetype='text/plain; charset=utf-8')
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-    
-  
