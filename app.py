@@ -1,4 +1,5 @@
 from flask import Flask, request, Response
+import google.generativeai as genai
 import requests
 import os
 
@@ -6,17 +7,20 @@ app = Flask(__name__)
 
 # API Keys
 CRICKET_API_KEY = "5393947d-ab90-478e-ab15-6e9eb83989c1"
-GEMINI_API_KEY = "AQ.Ab8RN6J8-tetRqshwAkfiHzY85tJI9RNQVljMkE5_IUR0zMP0A"
+GEMINI_API_KEY = "AQ.Ab8RN6JCJlMqSZeblFh1OBzmiVRoKsCs11Hj0xFjUwhmmMCcmA"
+
+# Google Gemini Configuration
+genai.configure(api_key=GEMINI_API_KEY)
+model = genai.GenerativeModel('gemini-1.5-flash')
 
 @app.route('/chat', methods=['POST'])
 def chat():
     try:
-        # App Inventor నుండి వచ్చే డేటాని సెక్యూర్ గా రీడ్ చేయడం
+        # App నుండి వచ్చే డేటాని చదవడం
         data = request.get_json(silent=True) or {}
         user_message = str(data.get('message', '')).strip()
 
         if not user_message:
-            # ఒకవేళ యాప్ ప్లెయిన్ టెక్స్ట్ లేదా ఫారమ్ డేటా పంపితే:
             user_message = request.form.get('message', '') or request.data.decode('utf-8', errors='ignore')
 
         user_message_clean = user_message.lower().strip()
@@ -42,24 +46,16 @@ def chat():
         elif 'hallo' in user_message_clean or 'hello' in user_message_clean or 'హాయ్' in user_message_clean:
             return Response("హలో నేస్తమా! నేను నీ పర్సనల్ జార్విస్ AI ని. నీకు ఏ సందేహం ఉందో అడుగు (మెడికల్, కార్డియాలజీ, నర్సింగ్, బీకామ్ లేదా క్రికెట్ వివరాలు).", mimetype='text/plain; charset=utf-8')
 
-        # 3. Gemini AI / సాధారణ ప్రశ్నలు (REST API ద్వారా నేరుగా కాల్ చేయడం)
+        # 3. Gemini AI ద్వారా సమాధానం (జార్విస్ మోడ్)
         else:
-            gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={GEMINI_API_KEY}"
-            payload = {
-                "contents": [{
-                    "parts": [{
-                        "text": f"నువ్వు ఒక పవర్ ఫుల్ పర్సనల్ AI అసిస్టెంట్ 'జార్విస్' (Rajesh AI). కార్డియాలజీ, మెడిసిన్, బిఎస్సీ నర్సింగ్, బీకామ్ మరియు ఇతర ఏ కోర్సు సంబంధిత ప్రశ్నలైనా చాలా స్పష్టంగా, పాయింట్ వారీగా తెలుగులో సమాధానం ఇవ్వు.\n\nప్రశ్న: {user_message}"
-                    }]
-                }]
-            }
-            res = requests.post(gemini_url, json=payload, headers={'Content-Type': 'application/json'})
-            
-            if res.status_code == 200:
-                result_json = res.json()
-                ai_text = result_json['candidates'][0]['content']['parts'][0]['text']
-                return Response(ai_text, mimetype='text/plain; charset=utf-8')
-            else:
-                return Response("నమస్కారం! నేను నీ పర్సనల్ జార్విస్ AI ని. నన్ను ఏ సబ్జెక్ట్ లేదా క్రికెట్ డౌట్ అయినా అడగొచ్చు.", mimetype='text/plain; charset=utf-8')
+            prompt = (
+                "నువ్వు ఒక అత్యంత తెలివైన, పవర్ ఫుల్ పర్సనల్ AI అసిస్టెంట్ 'జార్విస్' (Rajesh AI). "
+                "కార్డియాలజీ, మెడిసిన్, బిఎస్సీ నర్సింగ్, బీకామ్, డిప్లమా మరియు ఇతర ఏ కోర్సు లేదా జనరల్ సంబంధిత ప్రశ్నలైనా "
+                "చాలా స్పష్టంగా, పాయింట్ వారీగా, సులభంగా అర్థమయ్యే తెలుగులో సమాధానం ఇవ్వు.\n\n"
+                f"ప్రశ్న: {user_message}"
+            )
+            response = model.generate_content(prompt)
+            return Response(response.text, mimetype='text/plain; charset=utf-8')
 
     except Exception as e:
         return Response("హలో నేస్తమా! నీ ప్రశ్నకు సమాధానం ఇవ్వడంలో చిన్న లోపం జరిగింది. మళ్లీ ప్రయత్నించు.", mimetype='text/plain; charset=utf-8')
