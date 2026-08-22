@@ -5,14 +5,11 @@ import os
 
 app = Flask(__name__)
 
-# API Keys (నువ్వు ఇచ్చిన కీ ని పర్ఫెక్ట్‌గా సెట్ చేశాను)
-# API Keys
+# API Keys (Render Environment variables నుండి లేదా డైరెక్ట్‌గా పనిచేసేలా)
 CRICKET_API_KEY = os.environ.get("CRICKET_API_KEY", "5393947d-ab90-478e-ab15-6e9eb83989c1")
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "AQ.Ab8RN6J8-tetRqshwAkfiHzY85tJI9RNQVljMkE5_IUR0zMP0A")
 
-genai.configure(api_key=GEMINI_API_KEY)
-
-
+# Gemini configuration
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-1.5-flash')
 
@@ -39,7 +36,6 @@ def chat():
                     teams = match.get('teams', [])
                     
                     team1 = teams[0] if len(teams) > 0 else "Team A"
-                    team2 = teams[1] if len(teams) > 1 else "Team B"
                     fav_team = team1
                     
                     is_t20 = 't20' in match_type or 't20' in name.lower()
@@ -71,7 +67,7 @@ def chat():
         except Exception:
             return Response("డేటా సేకరణలో చిన్న అంతరాయం ఏర్పడింది.", mimetype='text/plain; charset=utf-8')
 
-    # 2. పర్సనల్ జార్విస్ AI (మెడికల్, కార్డియాలజీ, బిఎస్సీ నర్సింగ్, బీకామ్ & ఇతర చదువులకు)
+    # 2. పర్సనల్ జార్విస్ AI (కార్డియాలజీ, మెడికల్, బిఎస్సీ నర్సింగ్, బీకామ్ & ఇతర చదువులకు)
     else:
         try:
             prompt = (
