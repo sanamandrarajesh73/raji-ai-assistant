@@ -11,7 +11,9 @@ GEMINI_API_KEY = "AQ.Ab8RN6JCJlMqSZeblFh1OBzmiVRoKsCs11Hj0xFjUwhmmMCcmA"
 
 # Google Gemini Configuration
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-1.5-flash')
+
+# సరి చేసిన కొత్త Gemini Model Name
+model = genai.GenerativeModel('gemini-2.5-flash')
 
 @app.route('/chat', methods=['POST'])
 def chat():
@@ -58,7 +60,8 @@ def chat():
             return Response(response.text, mimetype='text/plain; charset=utf-8')
 
     except Exception as e:
-        return Response("హలో నేస్తమా! నీ ప్రశ్నకు సమాధానం ఇవ్వడంలో చిన్న లోపం జరిగింది. మళ్లీ ప్రయత్నించు.", mimetype='text/plain; charset=utf-8')
+        # అసలైన ఎర్రర్ ఏంటో ప్రింట్ చేస్తుంది
+        return Response(f"లోపం వివరాలు: {str(e)}", mimetype='text/plain; charset=utf-8')
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
