@@ -6,7 +6,7 @@ from datetime import date
 app = Flask(__name__)
 
 # ============================================================
-# API KEYS (పక్కాగా పనిచేసేలా డైరెక్ట్ కీస్ సెట్ చేశాం)
+# API KEYS
 # ============================================================
 CRICKET_API_KEY = "5393947d-ab90-478e-ab15-6e9eb83989c1"
 GROQ_API_KEY = "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"
@@ -163,26 +163,36 @@ def chat():
             return Response("ప్రస్తుతం ఎటువంటి లైవ్ మ్యాచ్‌లు లేవు నేస్తమా.", mimetype="text/plain; charset=utf-8")
 
         # 3. GREETINGS
-        elif any(k in user_message_clean for k in ["hello", "hallo", "హాయ్"]):
-            return Response("హలో నేస్తమా! నేను Phoenix + Jarvis AI. నీకు ఏ సహాయం కావాలో అడుగు.", mimetype="text/plain; charset=utf-8")
+        elif user_message_clean in ["hello", "hallo", "హాయ్", "hi"]:
+            return Response("హలో నేస్తమా! నేను నీ పర్సనల్ Phoenix + Jarvis AI ని. నీకు ఏ ప్రశ్న ఉన్నా అడుగు, సమాధానం ఇస్తాను.", mimetype="text/plain; charset=utf-8")
 
-        # 4. GROQ AI (JARVIS)
+        # 4. UNIVERSAL GROQ AI (JARVIS - ఏ ప్రశ్నకైనా సమాధానం ఇస్తుంది)
         else:
-            headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
+            headers = {
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json"
+            }
             payload = {
                 "model": "llama-3.1-8b-instant",
-            
                 "messages": [
-                    {"role": "system", "content": "నువ్వు Phoenix/Jarvis అనే పవర్‌ఫుల్ personal AI assistant. స్పష్టంగా, సులభమైన తెలుగులో సమాధానం ఇవ్వు."},
-                    {"role": "user", "content": user_message}
+                    {
+                        "role": "system",
+                        "content": "నువ్వు 'జార్విస్' అనే అత్యంత తెలివైన ఆల్ రౌండర్ AI అసిస్టెంట్. యూజర్ అడిగే ఏ విషయానికైనా (మెడికల్, డిప్లొమా, సైన్స్, కాథ్ ల్యాబ్, కోడింగ్, జనరల్ నాలెడ్జ్) చాలా వివరంగా, స్పష్టంగా తెలుగులో సమాధానం ఇవ్వు."
+                    },
+                    {
+                        "role": "user",
+                        "content": user_message
+                    }
                 ]
             }
             res = requests.post("https://api.groq.com/openai/v1/chat/completions", json=payload, headers=headers, timeout=30)
             res_data = res.json()
+            
             if "choices" in res_data and len(res_data["choices"]) > 0:
                 answer = res_data["choices"][0]["message"]["content"]
                 return Response(answer, mimetype="text/plain; charset=utf-8")
-            return Response(f"AI Error: {res.text}", mimetype="text/plain; charset=utf-8")
+            else:
+                return Response(f"AI Error: {res.text}", mimetype="text/plain; charset=utf-8")
 
     except Exception as e:
         return Response(f"Error Details: {str(e)}", mimetype="text/plain; charset=utf-8")
