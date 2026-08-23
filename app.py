@@ -166,14 +166,14 @@ def chat():
         elif user_message_clean in ["hello", "hallo", "హాయ్", "hi"]:
             return Response("హలో నేస్తమా! నేను నీ పర్సనల్ Phoenix + Jarvis AI ని. నీకు ఏ ప్రశ్న ఉన్నా అడుగు, సమాధానం ఇస్తాను.", mimetype="text/plain; charset=utf-8")
 
-        # 4. UNIVERSAL GROQ AI (JARVIS - ఏ ప్రశ్నకైనా సమాధానం ఇస్తుంది)
+        # 4. UNIVERSAL GROQ AI (JARVIS - ఆక్టీవ్ AI మోడల్)
         else:
             headers = {
                 "Authorization": f"Bearer {GROQ_API_KEY}",
                 "Content-Type": "application/json"
             }
             payload = {
-                "model": "llama-3.1-8b-instant",
+                "model": "openai/gpt-oss-20b",
                 "messages": [
                     {
                         "role": "system",
