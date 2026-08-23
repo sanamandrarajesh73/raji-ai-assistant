@@ -170,7 +170,8 @@ def chat():
         else:
             headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
             payload = {
-                "model": "llama-3.3-70b-versatile",
+                "model": "llama-3.1-8b-instant",
+            
                 "messages": [
                     {"role": "system", "content": "నువ్వు Phoenix/Jarvis అనే పవర్‌ఫుల్ personal AI assistant. స్పష్టంగా, సులభమైన తెలుగులో సమాధానం ఇవ్వు."},
                     {"role": "user", "content": user_message}
