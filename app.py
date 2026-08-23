@@ -45,14 +45,15 @@ def chat():
         elif 'hallo' in user_message_clean or 'hello' in user_message_clean or 'హాయ్' in user_message_clean:
             return Response("హలో నేస్తమా! నేను నీ పర్సనల్ జార్విస్ AI ని. నీకు ఏ సందేహం ఉందో అడుగు.", mimetype='text/plain; charset=utf-8')
 
-        # 3. Gemini AI (జార్విస్ మోడ్)
+        # 3. Gemini AI
         else:
-            prompt = f"నువ్వు ఒక పవర్ ఫుల్ పర్సనల్ AI అసిస్టెంట్ 'జార్విస్'. మెడికల్, కార్డియాలజీ, నర్సింగ్, బీకామ్ లేదా జనరల్ క్వశ్చన్స్‌కి స్పష్టంగా తెలుగులో సమాధానం ఇవ్వు. ప్రశ్న: {user_message}"
+            prompt = f"నువ్వు ఒక పవర్ ఫుల్ పర్సనల్ AI అసిస్టెంట్ 'జార్విస్'. మెడికల్, ఆర్ట్ & డ్రాయింగ్, నర్సింగ్, బీకామ్ లేదా జనరల్ క్వశ్చన్స్‌కి స్పష్టంగా తెలుగులో సమాధానం ఇవ్వు. ప్రశ్న: {user_message}"
             response = model.generate_content(prompt)
             return Response(response.text, mimetype='text/plain; charset=utf-8')
 
     except Exception as e:
-        return Response("క్షమించండి, సమాధానం ప్రాసెస్ చేయడంలో చిన్న లోపం జరిగింది. మళ్లీ ప్రయత్నించు.", mimetype='text/plain; charset=utf-8')
+        # అసలైన ఎర్రర్ ఏంటో డైరెక్ట్‌గా చూపిస్తుంది
+        return Response(f"Error Details: {str(e)}", mimetype='text/plain; charset=utf-8')
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
