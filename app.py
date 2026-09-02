@@ -39,8 +39,8 @@ def home():
             f"యూజర్ ప్రశ్న: {user_prompt}"
         )
 
-        # కరెక్ట్ మోడల్ నేమ్ ఉపయోగించబడింది
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        # గూగుల్ సూచించిన కరెక్ట్ మోడల్
+        model = genai.GenerativeModel('gemini-3.6-flash')
         response = model.generate_content(system_context)
 
         if response and response.text:
