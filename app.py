@@ -1,5 +1,5 @@
 import os
-from flask import Flask, request, jsonify
+from flask import Flask, request
 import google.generativeai as genai
 
 app = Flask(__name__)
@@ -30,12 +30,21 @@ def home():
 @app.route("/chat", methods=["POST"])
 def chat():
     try:
-        data = request.get_json(silent=True) or {}
-        user_message = data.get("message", "").strip()
-
-        # Input fallback logic
-        if not user_message:
-            user_message = request.form.get("message", "").strip()
+        # App Inventor ద్వారా వచ్చే డేటాను ఫోర్స్-రీడ్ చేయడం
+        raw_data = request.get_data(as_text=True) or ""
+        
+        user_message = ""
+        if "message" in raw_data:
+            try:
+                # JSON నార్మల్ గా రాకపోతే టెక్స్ట్ నుంచి మెసేజ్ వెతకడం
+                import json
+                data = json.loads(raw_data)
+                user_message = data.get("message", "")
+            except:
+                # JSON బ్రేక్ అయితే రా టెక్స్ట్ క్లీన్ చేయడం
+                user_message = raw_data.replace('{"message":"', '').replace('"}', '').replace('"', '').strip()
+        else:
+            user_message = raw_data.strip()
 
         if not user_message:
             return "దయచేసి మీ ప్రశ్నను వివరంగా టైప్ చేయండి.", 200, {'Content-Type': 'text/plain; charset=utf-8'}
