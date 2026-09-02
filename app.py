@@ -46,19 +46,19 @@ def home():
             f"సమాధానాలు స్పష్టంగా తెలుగు భాషలో అందించు.\n\nయూజర్ ప్రశ్న: {user_prompt}"
         )
 
-        # మొదటి ప్రాధాన్యత: gemini-3.6-flash, బిజీగా ఉంటే: gemini-1.5-flash
+        # మొదటి ప్రాధాన్యత: gemini-3.6-flash, బ్యాకప్: gemini-2.5-flash
         response = call_gemini('gemini-3.6-flash', system_prompt)
         
         if response.status_code != 200:
-            response = call_gemini('gemini-1.5-flash', system_prompt)
+            response = call_gemini('gemini-2.5-flash', system_prompt)
 
         res_data = response.json()
 
         if response.status_code == 200:
             ai_text = res_data['candidates'][0]['content']['parts'][0]['text']
             
-            # Markdown గుర్తులను (Stars, Dashes, Hashtags) తీసేసే కోడ్
-            clean_text = ai_text.replace('**', '').replace('*', '').replace('#', '')
+            # Markdown గుర్తులను (Stars, Dashes, Hashtags, Bold/Italic formatting) తీసేసే కోడ్
+            clean_text = ai_text.replace('**', '').replace('*', '').replace('#', '').replace('-', '')
             
             return clean_text, 200, {'Content-Type': 'text/plain; charset=utf-8'}
         else:
