@@ -20,7 +20,6 @@ def home():
 
         user_prompt = None
 
-        # Request Handling
         if request.is_json:
             data = request.get_json(silent=True)
             if data:
@@ -41,8 +40,8 @@ def home():
             f"యూజర్ ప్రశ్న: {user_prompt}"
         )
 
-        # లైవ్ లో ఉన్న పర్ఫెక్ట్ మోడల్
-        model = genai.GenerativeModel('gemini-2.5-flash')
+        # models/ అని స్పష్టంగా మోడల్ పాత్ నిర్దేశించబడింది
+        model = genai.GenerativeModel('models/gemini-2.5-flash')
         response = model.generate_content(system_context)
 
         if response and hasattr(response, 'text') and response.text:
