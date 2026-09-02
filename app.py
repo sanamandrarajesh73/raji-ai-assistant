@@ -16,15 +16,37 @@ def home():
 
     try:
         if not API_KEY:
-            return "API Key నాట్ ఫౌండ్!", 200
+            return "API Key నాట్ ఫౌండ్: Render లో GEMINI_API_KEY సరిగ్గా ఉందో లేదో చూడండి.", 200
 
-        # నీ API Key కి సపోర్ట్ చేసే మోడల్స్ లిస్ట్ తెలుసుకోవడం
-        available_models = []
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                available_models.append(m.name)
-        
-        return f"అందుబాటులో ఉన్న మోడల్స్: {', '.join(available_models)}", 200
+        data = request.get_json(silent=True)
+        user_prompt = None
+
+        if data and 'prompt' in data:
+            user_prompt = data['prompt']
+        elif request.form and 'prompt' in request.form:
+            user_prompt = request.form['prompt']
+        else:
+            raw_text = request.get_data(as_text=True)
+            if raw_text:
+                user_prompt = raw_text
+
+        if not user_prompt:
+            return "దయచేసి ప్రశ్న టైప్ చేయండి.", 400
+
+        system_context = (
+            "యు ఆర్ ఫీనిక్స్ AI (Phoenix AI) - ఆల్ రౌండర్ రక్షకుడు & సహాయకుడు. "
+            "సమాధానాలు స్పష్టంగా తెలుగు భాషలో అందించు.\n\n"
+            f"యూజర్ ప్రశ్న: {user_prompt}"
+        )
+
+        # కరెక్ట్ మోడల్ నేమ్ ఉపయోగించబడింది
+        model = genai.GenerativeModel('gemini-2.5-flash')
+        response = model.generate_content(system_context)
+
+        if response and response.text:
+            return response.text, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+        else:
+            return "AI నుండి ఖాళీ రెస్పాన్స్ వచ్చింది.", 200
 
     except Exception as err:
         return f"ఎర్రర్ వివరాలు: {str(err)}", 200
