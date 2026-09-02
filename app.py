@@ -1,42 +1,23 @@
 import os
-from flask import Flask, request, jsonify
+from flask import Flask, request
 import google.generativeai as genai
 
 app = Flask(__name__)
 
-# Fetch Gemini API Key from Render Environment Variables
 API_KEY = os.environ.get("GEMINI_API_KEY")
 
 if API_KEY:
     genai.configure(api_key=API_KEY)
 
-# Modern active Gemini models
-MODELS_TO_TRY = [
-    'gemini-1.5-flash',
-    'gemini-1.5-pro'
-]
-
-def generate_ai_response(prompt_text):
-    if not API_KEY:
-        return "సాంకేతిక లోపం: API Key కాన్ఫిగర్ చేయబడలేదు. దయచేసి Render లో GEMINI_API_KEY సెట్ చేయండి."
-
-    for model_name in MODELS_TO_TRY:
-        try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(prompt_text)
-            if response and response.text:
-                return response.text
-        except Exception:
-            continue
-
-    return "సాంకేతిక లోపం: AI సర్వీస్ ప్రస్తుతం అందుబాటులో లేదు."
-
 @app.route('/', methods=['GET', 'POST'])
 def home():
     if request.method == 'GET':
-        return "Phoenix AI Backend is Active and Running!"
+        return "Phoenix AI Backend is Active!"
 
     try:
+        if not API_KEY:
+            return "API Key నాట్ ఫౌండ్: Render లో GEMINI_API_KEY సరిగ్గా ఉందో లేదో చూడండి.", 200
+
         data = request.get_json(silent=True)
         user_prompt = None
 
@@ -50,19 +31,25 @@ def home():
                 user_prompt = raw_text
 
         if not user_prompt:
-            return "దయచేసి ఏదైనా ప్రశ్న లేదా సందేశం టైప్ చేయండి.", 400
+            return "దయచేసి ప్రశ్న టైప్ చేయండి.", 400
 
         system_context = (
             "యు ఆర్ ఫీనిక్స్ AI (Phoenix AI) - ఆల్ రౌండర్ రక్షకుడు & సహాయకుడు. "
-            "సమాధానాలు స్పష్టంగా, సులువుగా అర్థమయ్యేలా తెలుగు భాషలో అందించు.\n\n"
+            "సమాధానాలు స్పష్టంగా తెలుగు భాషలో అందించు.\n\n"
             f"యూజర్ ప్రశ్న: {user_prompt}"
         )
 
-        ai_response = generate_ai_response(system_context)
-        return ai_response, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(system_context)
+
+        if response and response.text:
+            return response.text, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+        else:
+            return "AI నుండి ఖాళీ రెస్పాన్స్ వచ్చింది.", 200
 
     except Exception as err:
-        return f"సాంకేతిక లోపం వచ్చింది: {str(err)}", 500
+        # అసలైన లోపం ఏంటో స్క్రీన్ పై చూపిస్తుంది
+        return f"ఎర్రర్ వివరాలు: {str(err)}", 200
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
