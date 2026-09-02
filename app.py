@@ -36,7 +36,7 @@ def home():
             f"సమాధానాలు స్పష్టంగా తెలుగు భాషలో అందించు.\n\nయూజర్ ప్రశ్న: {user_prompt}"
         )
 
-        # గూగుల్ సూచించిన gemini-3.6-flash REST API URL
+        # gemini-3.6-flash కి అప్‌డేట్ చేసిన URL
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={API_KEY}"
         
         headers = {'Content-Type': 'application/json'}
