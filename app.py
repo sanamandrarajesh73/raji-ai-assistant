@@ -1,13 +1,10 @@
 import os
+import requests
 from flask import Flask, request
-import google.generativeai as genai
 
 app = Flask(__name__)
 
 API_KEY = os.environ.get("GEMINI_API_KEY")
-
-if API_KEY:
-    genai.configure(api_key=API_KEY)
 
 @app.route('/', methods=['GET', 'POST'])
 def home():
@@ -34,20 +31,30 @@ def home():
         if not user_prompt or not user_prompt.strip():
             return "దయచేసి ప్రశ్న టైప్ చేయండి.", 200
 
-        system_context = (
+        system_prompt = (
             "యు ఆర్ ఫీనిక్స్ AI (Phoenix AI) - ఆల్ రౌండర్ రక్షకుడు & సహాయకుడు. "
-            "సమాధానాలు స్పష్టంగా తెలుగు భాషలో అందించు.\n\n"
-            f"యూజర్ ప్రశ్న: {user_prompt}"
+            f"సమాధానాలు స్పష్టంగా తెలుగు భాషలో అందించు.\n\nయూజర్ ప్రశ్న: {user_prompt}"
         )
 
-        # models/ అని స్పష్టంగా మోడల్ పాత్ నిర్దేశించబడింది
-        model = genai.GenerativeModel('models/gemini-2.5-flash')
-        response = model.generate_content(system_context)
+        # డైరెక్ట్ REST API ద్వారా Gemini 2.5 Flash ని పిలవడం
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={API_KEY}"
+        
+        headers = {'Content-Type': 'application/json'}
+        payload = {
+            "contents": [{
+                "parts": [{"text": system_prompt}]
+            }]
+        }
 
-        if response and hasattr(response, 'text') and response.text:
-            return response.text, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+        response = requests.post(url, json=payload, headers=headers)
+        res_data = response.json()
+
+        if response.status_code == 200:
+            ai_text = res_data['candidates'][0]['content']['parts'][0]['text']
+            return ai_text, 200, {'Content-Type': 'text/plain; charset=utf-8'}
         else:
-            return "AI నుండి స్పందన రాలేదు.", 200
+            error_msg = res_data.get('error', {}).get('message', 'అపరిచిత లోపం')
+            return f"గూగుల్ API లోపం ({response.status_code}): {error_msg}", 200
 
     except Exception as err:
         return f"ఎర్రర్ వివరాలు: {str(err)}", 200
