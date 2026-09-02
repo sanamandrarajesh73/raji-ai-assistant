@@ -10,29 +10,26 @@ API_KEY = os.environ.get("GEMINI_API_KEY")
 if API_KEY:
     genai.configure(api_key=API_KEY)
 
-# Priority list of models to try for maximum reliability
+# Modern active Gemini models
 MODELS_TO_TRY = [
     'gemini-1.5-flash',
-    'gemini-1.5-pro',
-    'gemini-pro'
+    'gemini-1.5-pro'
 ]
 
 def generate_ai_response(prompt_text):
     if not API_KEY:
         return "సాంకేతిక లోపం: API Key కాన్ఫిగర్ చేయబడలేదు. దయచేసి Render లో GEMINI_API_KEY సెట్ చేయండి."
 
-    # Try available models in order
     for model_name in MODELS_TO_TRY:
         try:
             model = genai.GenerativeModel(model_name)
             response = model.generate_content(prompt_text)
             if response and response.text:
                 return response.text
-        except Exception as e:
-            continue  # Try next model if current model fails
+        except Exception:
+            continue
 
-    # Fallback response if all configured models encounter errors
-    return "సాంకేతిక లోపం: AI సర్వీస్ ప్రస్తుతం అందుబాటులో లేదు. దయచేసి కొద్దిసేపటి తర్వాత మళ్లీ ప్రయత్నించండి."
+    return "సాంకేతిక లోపం: AI సర్వీస్ ప్రస్తుతం అందుబాటులో లేదు."
 
 @app.route('/', methods=['GET', 'POST'])
 def home():
@@ -55,7 +52,6 @@ def home():
         if not user_prompt:
             return "దయచేసి ఏదైనా ప్రశ్న లేదా సందేశం టైప్ చేయండి.", 400
 
-        # System Persona for Phoenix AI Assistant
         system_context = (
             "యు ఆర్ ఫీనిక్స్ AI (Phoenix AI) - ఆల్ రౌండర్ రక్షకుడు & సహాయకుడు. "
             "సమాధానాలు స్పష్టంగా, సులువుగా అర్థమయ్యేలా తెలుగు భాషలో అందించు.\n\n"
@@ -71,4 +67,3 @@ def home():
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-  
