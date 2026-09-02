@@ -39,7 +39,7 @@ def home():
             f"యూజర్ ప్రశ్న: {user_prompt}"
         )
 
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-pro')
         response = model.generate_content(system_context)
 
         if response and response.text:
@@ -48,7 +48,6 @@ def home():
             return "AI నుండి ఖాళీ రెస్పాన్స్ వచ్చింది.", 200
 
     except Exception as err:
-        # అసలైన లోపం ఏంటో స్క్రీన్ పై చూపిస్తుంది
         return f"ఎర్రర్ వివరాలు: {str(err)}", 200
 
 if __name__ == '__main__':
