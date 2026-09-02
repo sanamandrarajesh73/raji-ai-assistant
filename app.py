@@ -39,7 +39,7 @@ def home():
             f"యూజర్ ప్రశ్న: {user_prompt}"
         )
 
-        model = genai.GenerativeModel('gemini-pro')
+        model = genai.GenerativeModel('gemini-2.5-flash')
         response = model.generate_content(system_context)
 
         if response and response.text:
