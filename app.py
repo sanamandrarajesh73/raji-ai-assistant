@@ -1,6 +1,6 @@
-import os
+ import os
 import requests
-from flask import Flask, request
+from flask import Flask, request, jsonify
 
 app = Flask(__name__)
 
@@ -9,7 +9,7 @@ API_KEY = os.environ.get("GEMINI_API_KEY")
 @app.route('/', methods=['GET', 'POST'])
 def home():
     if request.method == 'GET':
-        return "Phoenix AI Backend is Active!"
+        return "Phoenix AI Backend is Active!", 200
 
     try:
         if not API_KEY:
@@ -36,7 +36,6 @@ def home():
             f"సమాధానాలు స్పష్టంగా తెలుగు భాషలో అందించు.\n\nయూజర్ ప్రశ్న: {user_prompt}"
         )
 
-        # 100% పనిచేసే మోడల్ URL
         url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={API_KEY}"
         
         headers = {'Content-Type': 'application/json'}
@@ -46,24 +45,22 @@ def home():
             }]
         }
 
-        response = requests.post(url, json=payload, headers=headers)
+        # 15 సెకన్ల టైమ్‌అవుట్ పరిమితి
+        response = requests.post(url, json=payload, headers=headers, timeout=15)
         res_data = response.json()
 
         if response.status_code == 200:
             ai_text = res_data['candidates'][0]['content']['parts'][0]['text']
-            
-            # Markdown గుర్తులను (Stars, Dashes, Hashtags) క్లీన్ చేసే కోడ్
             clean_text = ai_text.replace('**', '').replace('*', '').replace('#', '')
             return clean_text, 200, {'Content-Type': 'text/plain; charset=utf-8'}
             
         elif response.status_code == 429:
             return "చాలా రిక్వెస్ట్‌లు వచ్చాయి. దయచేసి ఒక 30 సెకన్లు ఆగి మళ్లీ ప్రయత్నించండి.", 200
         else:
-            error_msg = res_data.get('error', {}).get('message', 'గూగుల్ సర్వర్లు బిజీగా ఉన్నాయి.')
-            return f"గూగుల్ API లోపం ({response.status_code}): {error_msg}", 200
+            return "సర్వర్ బిజీగా ఉంది. దయచేసి మళ్లీ ప్రయత్నించండి.", 200
 
     except Exception as err:
-        return f"ఎర్రర్ వివరాలు: {str(err)}", 200
+        return "సర్వర్ స్పందించడానికి ఎక్కువ సమయం తీసుకుంటోంది. మళ్లీ ప్రయత్నించండి.", 200
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
