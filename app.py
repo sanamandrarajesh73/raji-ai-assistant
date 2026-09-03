@@ -6,16 +6,6 @@ app = Flask(__name__)
 
 API_KEY = os.environ.get("GEMINI_API_KEY")
 
-def call_gemini(model_name, system_prompt):
-    url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={API_KEY}"
-    headers = {'Content-Type': 'application/json'}
-    payload = {
-        "contents": [{
-            "parts": [{"text": system_prompt}]
-        }]
-    }
-    return requests.post(url, json=payload, headers=headers)
-
 @app.route('/', methods=['GET', 'POST'])
 def home():
     if request.method == 'GET':
@@ -46,23 +36,28 @@ def home():
             f"సమాధానాలు స్పష్టంగా తెలుగు భాషలో అందించు.\n\nయూజర్ ప్రశ్న: {user_prompt}"
         )
 
-        # మొదటి ప్రాధాన్యత: gemini-3.6-flash, బ్యాకప్: gemini-2.5-flash
-        response = call_gemini('gemini-3.6-flash', system_prompt)
+        # Gemini 3.6 Flash మోడల్
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key={API_KEY}"
         
-        if response.status_code != 200:
-            response = call_gemini('gemini-2.5-flash', system_prompt)
+        headers = {'Content-Type': 'application/json'}
+        payload = {
+            "contents": [{
+                "parts": [{"text": system_prompt}]
+            }]
+        }
 
+        response = requests.post(url, json=payload, headers=headers)
         res_data = response.json()
 
         if response.status_code == 200:
             ai_text = res_data['candidates'][0]['content']['parts'][0]['text']
             
-            # Markdown గుర్తులను (Stars, Dashes, Hashtags, Bold/Italic formatting) తీసేసే కోడ్
-            clean_text = ai_text.replace('**', '').replace('*', '').replace('#', '').replace('-', '')
+            # Markdown గుర్తులను (Stars, Dashes, Hashtags) క్లీన్ చేసే కోడ్
+            clean_text = ai_text.replace('**', '').replace('*', '').replace('#', '')
             
             return clean_text, 200, {'Content-Type': 'text/plain; charset=utf-8'}
         else:
-            error_msg = res_data.get('error', {}).get('message', 'గూగుల్ సర్వర్లు బిజీగా ఉన్నాయి. మళ్లీ ప్రయత్నించండి.')
+            error_msg = res_data.get('error', {}).get('message', 'గూగుల్ సర్వర్లు బిజీగా ఉన్నాయి.')
             return f"గూగుల్ API లోపం ({response.status_code}): {error_msg}", 200
 
     except Exception as err:
