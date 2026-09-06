@@ -5,7 +5,6 @@ app = Flask(__name__)
 
 @app.route('/run', methods=['GET'])
 def get_data():
-    # 'q' స్థానంలో 'query' కి మార్చాను
     query = request.args.get('query', '').lower()
 
     if query == 'cricket':  
