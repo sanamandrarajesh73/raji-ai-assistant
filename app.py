@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify
 import requests
 
 app = Flask(__name__)
+# బ్రౌజర్‌లో తెలుగు అక్షరాలు క్లియర్‌గా కనిపించడానికి ఇది సహాయపడుతుంది
+app.config['JSON_AS_ASCII'] = False
 
 @app.route('/run', methods=['GET'])
 def get_data():
