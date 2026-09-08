@@ -5,9 +5,12 @@ app = Flask(__name__)
 
 @app.route('/run', methods=['GET'])
 def get_data():
-    query = request.args.get('query', '').lower()
+    query = request.args.get('query', '').strip().lower()
 
-    if query == 'cricket':  
+    if not query:
+        msg = "దయచేసి ఏదైనా ప్రశ్నించండి లేదా మాట్లాడండి!"
+        title = "🤖 PHOENIX AI"
+    elif query == 'cricket':  
         msg = "IND vs AUS: 180/4 (18.5 Ov) | ఇండియాకు గెలవడానికి 12 బంతుల్లో 15 రన్స్ కావాలి!"
         title = "🏏 LIVE CRICKET"
     elif query == 'tennis':  
@@ -28,16 +31,14 @@ def get_data():
             msg = "ధర: ₹2,850.50 (+18.5) | 🟢 BUY SIGNAL (5M Trend Positive)"
             title = "📈 RELIANCE STOCK"
     else:  
-        msg = f"నమస్తే! మీరు '{query}' అని అడిగారు. చెప్పండి బంగారం, నేను మీకు ఏ విధంగా సహాయపడగలను?"
+        msg = f"నమస్తే! మీరు '{query}' అని అడిగారు. నేను మీ PHOENIX AI ని, క్రికెట్, టెన్నిస్ లేదా స్టాక్స్ గురించి అడగండి."
         title = "🤖 PHOENIX AI"
 
-    # తెలుగు అక్షరాలు Unicode కాకుండా డైరెక్ట్ గా వెళ్లడానికి:
-    response = app.response_class(
-        response=json.dumps({"status": "success", "title": title, "data": msg}, ensure_ascii=False),
-        status=200,
-        mimetype='application/json'
-    )
-    return response
+    return jsonify({
+        "status": "success",
+        "title": title,
+        "data": msg
+    })
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5050)
