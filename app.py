@@ -1,4 +1,6 @@
 import os
+import re
+
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 
@@ -8,9 +10,9 @@ from google.genai import types
 
 
 # =========================================================
-# 🦅 PHOENIX AI V3
+# 🦅 PHOENIX AI
 # Gemini Primary + OpenAI Optional
-# Smart Router + Live Search + Automatic Fallback
+# Clean Answers + Live Search + Smart Understanding
 # =========================================================
 
 app = Flask(__name__)
@@ -26,7 +28,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
 
 # =========================================================
-# 🤖 CLIENTS
+# 🤖 AI CLIENTS
 # =========================================================
 
 openai_client = None
@@ -67,34 +69,130 @@ GEMINI_MODEL = os.getenv(
 
 
 # =========================================================
-# 🦅 PHOENIX PERSONALITY
+# 🦅 PHOENIX AI INSTRUCTIONS
 # =========================================================
 
 PHOENIX_INSTRUCTIONS = """
 You are PHOENIX AI.
 
-Creator: Rajesh
+Creator: Rajesh.
 
 You are an advanced all-round AI assistant.
 
-Main goals:
+Your most important job is to understand what the user
+actually wants before answering.
 
-1. Give accurate and useful answers.
-2. Think carefully before answering.
-3. Never invent facts.
-4. For current information, use live search when available.
-5. Clearly separate facts, estimates and opinions.
-6. If uncertain, say so honestly.
-7. If the user speaks Telugu, answer in fluent and simple Telugu.
-8. If the user asks for English, answer in English.
-9. Help with coding, technology, education, science,
-   finance, business, productivity and general knowledge.
-10. For coding problems, provide practical working solutions.
-11. Never expose API keys or secret credentials.
-12. Never claim 100% accuracy or guaranteed future results.
-13. Be concise but useful.
-14. Give the direct answer first.
+GENERAL RULES:
+
+1. Understand the complete user question and its intent.
+2. Do not answer based on only one keyword.
+3. Answer the actual question the user asked.
+4. If the question is simple, give a simple answer.
+5. If the user wants detailed information, give a detailed answer.
+6. If the user speaks Telugu, answer naturally in clear and simple Telugu.
+7. If the user mixes Telugu and English, understand both.
+8. If the user asks in English, answer in English.
+9. Do not unnecessarily repeat the user's question.
+10. Do not give unrelated information.
+11. Be helpful, practical and honest.
+12. Never invent facts.
+13. If information is uncertain, clearly say that it is uncertain.
+14. For current information, use live search when available.
+15. For stock market questions, clearly separate current facts,
+    analysis, estimates and predictions.
+16. Never invent live stock prices, news, scores or market data.
+17. For coding questions, provide practical working solutions.
+18. Explain difficult technical topics in beginner-friendly language.
+19. Help with education, science, technology, programming,
+    finance, business, productivity and general knowledge.
+20. Never expose API keys, passwords or secret credentials.
+21. Never claim guaranteed profits or 100 percent accuracy.
+
+IMPORTANT RESPONSE STYLE:
+
+The answer must be clean and easy to read on a mobile phone.
+
+DO NOT use Markdown formatting.
+
+DO NOT use:
+
+**
+###
+##
+__text__
+---
+
+Do not put unnecessary symbols around words.
+
+You MAY use:
+
+1. Numbered points
+2. Numbered steps
+• Simple bullet points
+
+Use normal paragraphs when appropriate.
+
+The final answer should look like a clean professional AI assistant
+response, not like raw Markdown.
 """
+
+
+# =========================================================
+# 🧹 CLEAN AI RESPONSE
+# =========================================================
+
+def clean_response(text):
+
+    if not text:
+        return "క్షమించండి, ప్రస్తుతం సమాధానం అందుబాటులో లేదు."
+
+    text = str(text)
+
+    # Remove Markdown bold and italic markers
+    text = text.replace("**", "")
+    text = text.replace("__", "")
+
+    # Remove Markdown headings
+    text = re.sub(
+        r"(?m)^\s*#{1,6}\s*",
+        "",
+        text
+    )
+
+    # Remove code fence markers
+    text = text.replace("```python", "")
+    text = text.replace("```javascript", "")
+    text = text.replace("```typescript", "")
+    text = text.replace("```java", "")
+    text = text.replace("```json", "")
+    text = text.replace("```html", "")
+    text = text.replace("```css", "")
+    text = text.replace("```bash", "")
+    text = text.replace("```text", "")
+    text = text.replace("```", "")
+
+    # Convert Markdown bullets to clean bullets
+    text = re.sub(
+        r"(?m)^\s*[-*]\s+",
+        "• ",
+        text
+    )
+
+    # Remove horizontal separators
+    text = re.sub(
+        r"(?m)^\s*-{3,}\s*$",
+        "",
+        text
+    )
+
+    # Remove excessive blank lines
+    text = re.sub(
+        r"\n{3,}",
+        "\n\n",
+        text
+    )
+
+    return text.strip()
 
 
 # =========================================================
@@ -112,10 +210,15 @@ def needs_live_information(text):
         "news",
         "price",
         "stock price",
+        "share price",
         "weather",
         "score",
         "match",
         "market",
+        "result",
+        "results",
+        "update",
+        "updates",
 
         "ఈరోజు",
         "ఇప్పుడు",
@@ -126,9 +229,14 @@ def needs_live_information(text):
         "ఇప్పటి",
         "వార్తలు",
         "ధర",
+        "షేర్ ధర",
+        "స్టాక్ ధర",
         "స్కోర్",
         "మ్యాచ్",
-        "మార్కెట్"
+        "మార్కెట్",
+        "రిజల్ట్",
+        "అప్డేట్",
+        "అప్‌డేట్"
     ]
 
     text_lower = text.lower()
@@ -140,7 +248,7 @@ def needs_live_information(text):
 
 
 # =========================================================
-# 💻 CODING DETECTION
+# 💻 CODING QUESTION DETECTION
 # =========================================================
 
 def is_coding_question(text):
@@ -160,11 +268,17 @@ def is_coding_question(text):
         "error",
         "github",
         "render",
+        "html",
+        "css",
+        "json",
+        "database",
+        "programming",
 
         "కోడింగ్",
         "కోడ్",
         "ఎర్రర్",
-        "బగ్"
+        "బగ్",
+        "ప్రోగ్రామింగ్"
     ]
 
     text_lower = text.lower()
@@ -184,19 +298,27 @@ def needs_deep_reasoning(text):
     keywords = [
         "deep research",
         "compare",
+        "comparison",
         "analysis",
         "analyze",
         "strategy",
         "architecture",
         "why",
         "how to build",
+        "advantages",
+        "disadvantages",
+        "difference",
 
         "పూర్తిగా",
         "విశ్లేషణ",
         "పోల్చి",
+        "పోలిక",
         "ఎందుకు",
         "ఎలా తయారు",
-        "లోతుగా"
+        "లోతుగా",
+        "ప్రయోజనాలు",
+        "నష్టాలు",
+        "తేడా"
     ]
 
     text_lower = text.lower()
@@ -233,7 +355,6 @@ def ask_gemini(question, live=False):
         tools=tools
     )
 
-    # Primary model
     models_to_try = [
         GEMINI_MODEL,
         "gemini-3.8-flash",
@@ -242,7 +363,7 @@ def ask_gemini(question, live=False):
         "gemini-3.5-flash"
     ]
 
-    # Remove duplicates
+    # Remove duplicate model names
     models_to_try = list(
         dict.fromkeys(models_to_try)
     )
@@ -261,7 +382,9 @@ def ask_gemini(question, live=False):
 
             if response and response.text:
 
-                return response.text.strip()
+                return clean_response(
+                    response.text
+                )
 
         except Exception as e:
 
@@ -287,7 +410,6 @@ def ask_openai(question, live=False):
     tools = []
 
     if live:
-
         tools.append({
             "type": "web_search_preview"
         })
@@ -300,145 +422,33 @@ def ask_openai(question, live=False):
     )
 
     if not response.output_text:
-
         raise RuntimeError(
             "OpenAI returned an empty response."
         )
 
-    return response.output_text.strip()
-
-
-# =========================================================
-# 🧠 GEMINI SYNTHESIS
-# =========================================================
-
-def synthesize_with_gemini(
-    question,
-    answer_a,
-    answer_b
-):
-
-    synthesis_prompt = f"""
-You are the final Phoenix AI answer engine.
-
-User question:
-{question}
-
-Answer A:
-{answer_a}
-
-Answer B:
-{answer_b}
-
-Create ONE reliable final answer.
-
-Rules:
-
-- Compare both answers.
-- Remove obvious contradictions.
-- Do not invent missing facts.
-- If information is uncertain, say so.
-- Give the direct answer first.
-- Then explain briefly.
-- If the user speaks Telugu, answer in Telugu.
-- Keep the answer clear and useful.
-"""
-
-    return ask_gemini(
-        synthesis_prompt,
-        live=False
+    return clean_response(
+        response.output_text
     )
 
 
 # =========================================================
-# 🧭 PHOENIX SMART ROUTER
+# 🧠 PHOENIX SMART ROUTER
 # =========================================================
 
 def phoenix_engine(question):
 
     live = needs_live_information(question)
+
     coding = is_coding_question(question)
+
     deep = needs_deep_reasoning(question)
 
 
     # =====================================================
-    # 1️⃣ DEEP QUESTION
-    # =====================================================
-
-    if deep:
-
-        gemini_answer = None
-        openai_answer = None
-
-
-        # Gemini first
-        try:
-
-            gemini_answer = ask_gemini(
-                question,
-                live=live
-            )
-
-        except Exception as e:
-
-            gemini_answer = None
-
-
-        # OpenAI optional
-        if openai_client:
-
-            try:
-
-                openai_answer = ask_openai(
-                    question,
-                    live=live
-                )
-
-            except Exception:
-
-                openai_answer = None
-
-
-        # Both available
-        if gemini_answer and openai_answer:
-
-            try:
-
-                return synthesize_with_gemini(
-                    question,
-                    gemini_answer,
-                    openai_answer
-                )
-
-            except Exception:
-
-                return gemini_answer
-
-
-        # Gemini available
-        if gemini_answer:
-
-            return gemini_answer
-
-
-        # OpenAI available
-        if openai_answer:
-
-            return openai_answer
-
-
-        raise RuntimeError(
-            "Both AI services are currently unavailable."
-        )
-
-
-    # =====================================================
-    # 2️⃣ LIVE QUESTION
+    # 1. CURRENT / LIVE QUESTIONS
     # =====================================================
 
     if live:
-
-        # Gemini + Google Search FIRST
 
         try:
 
@@ -453,7 +463,6 @@ def phoenix_engine(question):
 
 
         # OpenAI optional fallback
-
         if openai_client:
 
             try:
@@ -468,18 +477,11 @@ def phoenix_engine(question):
                 pass
 
 
-        raise RuntimeError(
-            "Live AI services are currently unavailable."
-        )
-
-
     # =====================================================
-    # 3️⃣ CODING QUESTION
+    # 2. CODING QUESTIONS
     # =====================================================
 
     if coding:
-
-        # Gemini first
 
         try:
 
@@ -492,8 +494,6 @@ def phoenix_engine(question):
 
             pass
 
-
-        # OpenAI optional fallback
 
         if openai_client:
 
@@ -509,16 +509,42 @@ def phoenix_engine(question):
                 pass
 
 
-        raise RuntimeError(
-            "Coding AI services are currently unavailable."
-        )
+    # =====================================================
+    # 3. DEEP QUESTIONS
+    # =====================================================
+
+    if deep:
+
+        try:
+
+            return ask_gemini(
+                question,
+                live=live
+            )
+
+        except Exception:
+
+            pass
+
+
+        if openai_client:
+
+            try:
+
+                return ask_openai(
+                    question,
+                    live=live
+                )
+
+            except Exception:
+
+                pass
 
 
     # =====================================================
-    # 4️⃣ NORMAL QUESTION
+    # 4. NORMAL QUESTIONS
     # =====================================================
 
-    # Gemini FIRST
     try:
 
         return ask_gemini(
@@ -531,7 +557,10 @@ def phoenix_engine(question):
         pass
 
 
-    # OpenAI SECOND
+    # =====================================================
+    # 5. OPENAI OPTIONAL FALLBACK
+    # =====================================================
+
     if openai_client:
 
         try:
@@ -546,6 +575,10 @@ def phoenix_engine(question):
             pass
 
 
+    # =====================================================
+    # 6. FINAL ERROR
+    # =====================================================
+
     raise RuntimeError(
         "Phoenix AI services are currently unavailable."
     )
@@ -555,7 +588,10 @@ def phoenix_engine(question):
 # 🏠 HOME
 # =========================================================
 
-@app.route("/", methods=["GET"])
+@app.route(
+    "/",
+    methods=["GET"]
+)
 def home():
 
     return jsonify({
@@ -565,7 +601,7 @@ def home():
         "title": "🦅 PHOENIX AI",
 
         "data":
-        "Phoenix AI V3 Backend is Active!"
+        "Phoenix AI is Active!"
     })
 
 
@@ -573,7 +609,10 @@ def home():
 # ❤️ HEALTH CHECK
 # =========================================================
 
-@app.route("/health", methods=["GET"])
+@app.route(
+    "/health",
+    methods=["GET"]
+)
 def health():
 
     return jsonify({
@@ -594,14 +633,10 @@ def health():
 
 
 # =========================================================
-# 🚀 MAIN AI ROUTE
+# 🚀 MAIN AI FUNCTION
 # =========================================================
 
-@app.route(
-    "/run",
-    methods=["GET", "POST"]
-)
-def run_ai():
+def process_ai_request():
 
     try:
 
@@ -609,7 +644,7 @@ def run_ai():
 
 
         # =================================================
-        # GET
+        # GET REQUEST
         # =================================================
 
         user_query = request.args.get(
@@ -619,7 +654,7 @@ def run_ai():
 
 
         # =================================================
-        # POST JSON
+        # POST JSON REQUEST
         # =================================================
 
         if not user_query and request.is_json:
@@ -642,7 +677,7 @@ def run_ai():
 
 
         # =================================================
-        # EMPTY QUESTION
+        # EMPTY MESSAGE
         # =================================================
 
         if not user_query:
@@ -660,7 +695,7 @@ def run_ai():
 
 
         # =================================================
-        # AI
+        # AI ENGINE
         # =================================================
 
         answer = phoenix_engine(
@@ -680,11 +715,16 @@ def run_ai():
             "🦅 PHOENIX AI",
 
             "data":
-            answer
+            clean_response(answer)
         })
 
 
     except Exception as e:
+
+        print(
+            "PHOENIX ERROR:",
+            str(e)
+        )
 
         return jsonify({
 
@@ -694,10 +734,35 @@ def run_ai():
             "🦅 PHOENIX AI ERROR",
 
             "data":
-            "ప్రస్తుతం Phoenix AIకి AI serviceలో సమస్య ఉంది. "
-            "కొద్దిసేపటి తర్వాత మళ్లీ ప్రయత్నించండి."
+            "క్షమించండి. ప్రస్తుతం Phoenix AI serviceలో సమస్య ఉంది. కొద్దిసేపటి తర్వాత మళ్లీ ప్రయత్నించండి."
 
         }), 500
+
+
+# =========================================================
+# 🚀 /run
+# =========================================================
+
+@app.route(
+    "/run",
+    methods=["GET", "POST"]
+)
+def run_ai():
+
+    return process_ai_request()
+
+
+# =========================================================
+# 🚀 /chat
+# =========================================================
+
+@app.route(
+    "/chat",
+    methods=["GET", "POST"]
+)
+def chat_ai():
+
+    return process_ai_request()
 
 
 # =========================================================
@@ -716,4 +781,4 @@ if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=port
-)
+    )
