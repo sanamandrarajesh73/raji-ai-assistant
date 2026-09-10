@@ -8,9 +8,9 @@ from google.genai import types
 
 
 # =========================================================
-# 🦅 PHOENIX AI V2
-# Dual AI Intelligence System
-# OpenAI + Gemini + Live Web + Smart Router + Fallback
+# 🦅 PHOENIX AI V3
+# Gemini Primary + OpenAI Optional
+# Smart Router + Live Search + Automatic Fallback
 # =========================================================
 
 app = Flask(__name__)
@@ -18,95 +18,169 @@ CORS(app)
 
 
 # =========================================================
-# 🔐 API CLIENTS
+# 🔐 API KEYS
 # =========================================================
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 
+
+# =========================================================
+# 🤖 CLIENTS
+# =========================================================
+
 openai_client = None
 gemini_client = None
 
+
 if OPENAI_API_KEY:
-    openai_client = OpenAI(api_key=OPENAI_API_KEY)
+    try:
+        openai_client = OpenAI(
+            api_key=OPENAI_API_KEY
+        )
+    except Exception:
+        openai_client = None
+
 
 if GEMINI_API_KEY:
-    gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+    try:
+        gemini_client = genai.Client(
+            api_key=GEMINI_API_KEY
+        )
+    except Exception:
+        gemini_client = None
 
 
 # =========================================================
 # 🧠 MODEL SETTINGS
 # =========================================================
 
-# Render Environment Variables నుంచి model names మార్చుకోవచ్చు.
-OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4.1")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.8-flash")
+OPENAI_MODEL = os.getenv(
+    "OPENAI_MODEL",
+    "gpt-4.1"
+)
+
+GEMINI_MODEL = os.getenv(
+    "GEMINI_MODEL",
+    "gemini-3.8-flash"
+)
 
 
 # =========================================================
-# 🦅 PHOENIX SYSTEM INTELLIGENCE
+# 🦅 PHOENIX PERSONALITY
 # =========================================================
 
 PHOENIX_INSTRUCTIONS = """
-You are PHOENIX AI, an advanced all-round AI assistant.
+You are PHOENIX AI.
 
 Creator: Rajesh
 
-Your goals:
+You are an advanced all-round AI assistant.
 
-1. Give accurate, useful and practical answers.
-2. Think deeply before answering.
-3. Never invent facts when reliable information is available.
-4. When current information is needed, use live web grounding/search.
-5. Clearly separate facts, estimates, opinions and predictions.
-6. If information is uncertain, say so instead of pretending certainty.
-7. Explain difficult subjects in simple Telugu when the user speaks Telugu.
-8. You can answer in English when the user asks for English.
-9. Help with technology, programming, education, science,
-   finance, business, productivity, general knowledge and creativity.
-10. Generate original ideas, alternatives and solutions.
-11. For coding problems, provide working and secure code.
-12. Never expose API keys, passwords or secret credentials.
-13. For important claims, prefer verifiable sources.
-14. Do not promise 100% accuracy or guaranteed future results.
+Main goals:
 
-Phoenix should behave like a helpful intelligent orchestrator,
-not like a blindly confident chatbot.
+1. Give accurate and useful answers.
+2. Think carefully before answering.
+3. Never invent facts.
+4. For current information, use live search when available.
+5. Clearly separate facts, estimates and opinions.
+6. If uncertain, say so honestly.
+7. If the user speaks Telugu, answer in fluent and simple Telugu.
+8. If the user asks for English, answer in English.
+9. Help with coding, technology, education, science,
+   finance, business, productivity and general knowledge.
+10. For coding problems, provide practical working solutions.
+11. Never expose API keys or secret credentials.
+12. Never claim 100% accuracy or guaranteed future results.
+13. Be concise but useful.
+14. Give the direct answer first.
 """
 
 
 # =========================================================
-# 🔎 QUESTION CLASSIFIER
+# 🔎 LIVE INFORMATION DETECTION
 # =========================================================
 
 def needs_live_information(text):
+
     keywords = [
-        "today", "latest", "live", "now", "current",
-        "ఈరోజు", "ఇప్పుడు", "తాజా", "లైవ్",
-        "ప్రస్తుతం", "నేటి", "ఇప్పటి",
-        "news", "price", "stock price", "weather",
-        "score", "match", "market"
+        "today",
+        "latest",
+        "live",
+        "now",
+        "current",
+        "news",
+        "price",
+        "stock price",
+        "weather",
+        "score",
+        "match",
+        "market",
+
+        "ఈరోజు",
+        "ఇప్పుడు",
+        "తాజా",
+        "లైవ్",
+        "ప్రస్తుతం",
+        "నేటి",
+        "ఇప్పటి",
+        "వార్తలు",
+        "ధర",
+        "స్కోర్",
+        "మ్యాచ్",
+        "మార్కెట్"
     ]
 
     text_lower = text.lower()
 
-    return any(word.lower() in text_lower for word in keywords)
+    return any(
+        word.lower() in text_lower
+        for word in keywords
+    )
 
+
+# =========================================================
+# 💻 CODING DETECTION
+# =========================================================
 
 def is_coding_question(text):
+
     keywords = [
-        "python", "javascript", "java", "flutter",
-        "kodular", "android", "api", "flask",
-        "code", "coding", "bug", "error",
-        "కోడింగ్", "కోడ్", "ఎర్రర్"
+        "python",
+        "javascript",
+        "java",
+        "flutter",
+        "kodular",
+        "android",
+        "api",
+        "flask",
+        "code",
+        "coding",
+        "bug",
+        "error",
+        "github",
+        "render",
+
+        "కోడింగ్",
+        "కోడ్",
+        "ఎర్రర్",
+        "బగ్"
     ]
 
     text_lower = text.lower()
 
-    return any(word.lower() in text_lower for word in keywords)
+    return any(
+        word.lower() in text_lower
+        for word in keywords
+    )
 
+
+# =========================================================
+# 🧠 DEEP QUESTION DETECTION
+# =========================================================
 
 def needs_deep_reasoning(text):
+
     keywords = [
         "deep research",
         "compare",
@@ -116,43 +190,21 @@ def needs_deep_reasoning(text):
         "architecture",
         "why",
         "how to build",
+
         "పూర్తిగా",
         "విశ్లేషణ",
         "పోల్చి",
         "ఎందుకు",
-        "ఎలా తయారు"
+        "ఎలా తయారు",
+        "లోతుగా"
     ]
 
     text_lower = text.lower()
 
-    return any(word.lower() in text_lower for word in keywords)
-
-
-# =========================================================
-# 🤖 OPENAI ENGINE
-# =========================================================
-
-def ask_openai(question, live=False):
-
-    if not openai_client:
-        raise RuntimeError("OPENAI_API_KEY is not configured.")
-
-    tools = []
-
-    # Live information కోసం OpenAI web search
-    if live:
-        tools.append({
-            "type": "web_search_preview"
-        })
-
-    response = openai_client.responses.create(
-        model=OPENAI_MODEL,
-        instructions=PHOENIX_INSTRUCTIONS,
-        input=question,
-        tools=tools
+    return any(
+        word.lower() in text_lower
+        for word in keywords
     )
-
-    return response.output_text.strip()
 
 
 # =========================================================
@@ -162,11 +214,13 @@ def ask_openai(question, live=False):
 def ask_gemini(question, live=False):
 
     if not gemini_client:
-        raise RuntimeError("GEMINI_API_KEY is not configured.")
+        raise RuntimeError(
+            "GEMINI_API_KEY is not configured."
+        )
 
     tools = []
 
-    # Gemini Google Search grounding
+    # Google Search for current information
     if live:
         tools.append(
             types.Tool(
@@ -179,23 +233,90 @@ def ask_gemini(question, live=False):
         tools=tools
     )
 
-    response = gemini_client.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=question,
-        config=config
+    # Primary model
+    models_to_try = [
+        GEMINI_MODEL,
+        "gemini-3.8-flash",
+        "gemini-3.7-flash",
+        "gemini-3.6-flash",
+        "gemini-3.5-flash"
+    ]
+
+    # Remove duplicates
+    models_to_try = list(
+        dict.fromkeys(models_to_try)
     )
 
-    return response.text.strip()
+    last_error = None
+
+    for model_name in models_to_try:
+
+        try:
+
+            response = gemini_client.models.generate_content(
+                model=model_name,
+                contents=question,
+                config=config
+            )
+
+            if response and response.text:
+
+                return response.text.strip()
+
+        except Exception as e:
+
+            last_error = e
+            continue
+
+    raise RuntimeError(
+        f"Gemini unavailable: {str(last_error)}"
+    )
 
 
 # =========================================================
-# 🧠 DUAL-BRAIN SYNTHESIS
+# 🤖 OPENAI ENGINE
 # =========================================================
 
-def synthesize_answers(question, answer_a, answer_b):
+def ask_openai(question, live=False):
 
     if not openai_client:
-        return answer_a or answer_b
+        raise RuntimeError(
+            "OPENAI_API_KEY is not configured."
+        )
+
+    tools = []
+
+    if live:
+
+        tools.append({
+            "type": "web_search_preview"
+        })
+
+    response = openai_client.responses.create(
+        model=OPENAI_MODEL,
+        instructions=PHOENIX_INSTRUCTIONS,
+        input=question,
+        tools=tools
+    )
+
+    if not response.output_text:
+
+        raise RuntimeError(
+            "OpenAI returned an empty response."
+        )
+
+    return response.output_text.strip()
+
+
+# =========================================================
+# 🧠 GEMINI SYNTHESIS
+# =========================================================
+
+def synthesize_with_gemini(
+    question,
+    answer_a,
+    answer_b
+):
 
     synthesis_prompt = f"""
 You are the final Phoenix AI answer engine.
@@ -203,34 +324,30 @@ You are the final Phoenix AI answer engine.
 User question:
 {question}
 
-AI A:
+Answer A:
 {answer_a}
 
-AI B:
+Answer B:
 {answer_b}
 
-Create ONE final answer.
+Create ONE reliable final answer.
 
 Rules:
+
 - Compare both answers.
-- Remove contradictions when possible.
-- Do not blindly trust either answer.
-- Keep correct useful information.
+- Remove obvious contradictions.
 - Do not invent missing facts.
-- If there is uncertainty, clearly mention it.
-- Give the user a direct answer first.
-- Then give useful explanation.
-- Answer in fluent Telugu if the question is Telugu.
-- Keep the response readable.
+- If information is uncertain, say so.
+- Give the direct answer first.
+- Then explain briefly.
+- If the user speaks Telugu, answer in Telugu.
+- Keep the answer clear and useful.
 """
 
-    response = openai_client.responses.create(
-        model=OPENAI_MODEL,
-        instructions=PHOENIX_INSTRUCTIONS,
-        input=synthesis_prompt
+    return ask_gemini(
+        synthesis_prompt,
+        live=False
     )
-
-    return response.output_text.strip()
 
 
 # =========================================================
@@ -243,73 +360,195 @@ def phoenix_engine(question):
     coding = is_coding_question(question)
     deep = needs_deep_reasoning(question)
 
-    # -----------------------------------------------------
-    # 1️⃣ Deep questions → Dual AI
-    # -----------------------------------------------------
+
+    # =====================================================
+    # 1️⃣ DEEP QUESTION
+    # =====================================================
 
     if deep:
 
-        openai_answer = None
         gemini_answer = None
+        openai_answer = None
 
+
+        # Gemini first
         try:
-            openai_answer = ask_openai(question, live=live)
-        except Exception as e:
-            openai_answer = f"OpenAI unavailable: {str(e)}"
 
-        try:
-            gemini_answer = ask_gemini(question, live=live)
-        except Exception as e:
-            gemini_answer = f"Gemini unavailable: {str(e)}"
+            gemini_answer = ask_gemini(
+                question,
+                live=live
+            )
 
-        return synthesize_answers(
-            question,
-            openai_answer,
-            gemini_answer
+        except Exception as e:
+
+            gemini_answer = None
+
+
+        # OpenAI optional
+        if openai_client:
+
+            try:
+
+                openai_answer = ask_openai(
+                    question,
+                    live=live
+                )
+
+            except Exception:
+
+                openai_answer = None
+
+
+        # Both available
+        if gemini_answer and openai_answer:
+
+            try:
+
+                return synthesize_with_gemini(
+                    question,
+                    gemini_answer,
+                    openai_answer
+                )
+
+            except Exception:
+
+                return gemini_answer
+
+
+        # Gemini available
+        if gemini_answer:
+
+            return gemini_answer
+
+
+        # OpenAI available
+        if openai_answer:
+
+            return openai_answer
+
+
+        raise RuntimeError(
+            "Both AI services are currently unavailable."
         )
 
 
-    # -----------------------------------------------------
-    # 2️⃣ Coding → OpenAI
-    # -----------------------------------------------------
-
-    if coding:
-
-        try:
-            return ask_openai(question, live=live)
-
-        except Exception:
-
-            # Gemini fallback
-            return ask_gemini(question, live=live)
-
-
-    # -----------------------------------------------------
-    # 3️⃣ Live/current → Gemini with Google Search
-    # -----------------------------------------------------
+    # =====================================================
+    # 2️⃣ LIVE QUESTION
+    # =====================================================
 
     if live:
 
+        # Gemini + Google Search FIRST
+
         try:
-            return ask_gemini(question, live=True)
+
+            return ask_gemini(
+                question,
+                live=True
+            )
 
         except Exception:
 
-            # OpenAI fallback
-            return ask_openai(question, live=True)
+            pass
 
 
-    # -----------------------------------------------------
-    # 4️⃣ Normal question → OpenAI first
-    # -----------------------------------------------------
+        # OpenAI optional fallback
 
+        if openai_client:
+
+            try:
+
+                return ask_openai(
+                    question,
+                    live=True
+                )
+
+            except Exception:
+
+                pass
+
+
+        raise RuntimeError(
+            "Live AI services are currently unavailable."
+        )
+
+
+    # =====================================================
+    # 3️⃣ CODING QUESTION
+    # =====================================================
+
+    if coding:
+
+        # Gemini first
+
+        try:
+
+            return ask_gemini(
+                question,
+                live=False
+            )
+
+        except Exception:
+
+            pass
+
+
+        # OpenAI optional fallback
+
+        if openai_client:
+
+            try:
+
+                return ask_openai(
+                    question,
+                    live=False
+                )
+
+            except Exception:
+
+                pass
+
+
+        raise RuntimeError(
+            "Coding AI services are currently unavailable."
+        )
+
+
+    # =====================================================
+    # 4️⃣ NORMAL QUESTION
+    # =====================================================
+
+    # Gemini FIRST
     try:
-        return ask_openai(question, live=False)
+
+        return ask_gemini(
+            question,
+            live=False
+        )
 
     except Exception:
 
-        # Gemini fallback
-        return ask_gemini(question, live=False)
+        pass
+
+
+    # OpenAI SECOND
+    if openai_client:
+
+        try:
+
+            return ask_openai(
+                question,
+                live=False
+            )
+
+        except Exception:
+
+            pass
+
+
+    raise RuntimeError(
+        "Phoenix AI services are currently unavailable."
+    )
 
 
 # =========================================================
@@ -320,9 +559,13 @@ def phoenix_engine(question):
 def home():
 
     return jsonify({
+
         "status": "success",
+
         "title": "🦅 PHOENIX AI",
-        "data": "Phoenix AI V2 Backend is Active!"
+
+        "data":
+        "Phoenix AI V3 Backend is Active!"
     })
 
 
@@ -334,11 +577,19 @@ def home():
 def health():
 
     return jsonify({
+
         "status": "success",
-        "openai": bool(openai_client),
+
         "gemini": bool(gemini_client),
+
+        "openai": bool(openai_client),
+
+        "gemini_model": GEMINI_MODEL,
+
         "openai_model": OPENAI_MODEL,
-        "gemini_model": GEMINI_MODEL
+
+        "engine":
+        "Gemini Primary + OpenAI Optional"
     })
 
 
@@ -346,62 +597,106 @@ def health():
 # 🚀 MAIN AI ROUTE
 # =========================================================
 
-@app.route("/run", methods=["GET", "POST"])
+@app.route(
+    "/run",
+    methods=["GET", "POST"]
+)
 def run_ai():
 
     try:
 
         user_query = ""
 
-        # GET
-        user_query = request.args.get("query", "").strip()
 
+        # =================================================
+        # GET
+        # =================================================
+
+        user_query = request.args.get(
+            "query",
+            ""
+        ).strip()
+
+
+        # =================================================
         # POST JSON
+        # =================================================
+
         if not user_query and request.is_json:
 
-            data = request.get_json(silent=True) or {}
+            data = request.get_json(
+                silent=True
+            ) or {}
 
             user_query = (
+
                 data.get("prompt")
+
                 or data.get("query")
+
                 or data.get("message")
+
                 or ""
+
             ).strip()
 
-        # Empty question
+
+        # =================================================
+        # EMPTY QUESTION
+        # =================================================
+
         if not user_query:
 
             return jsonify({
+
                 "status": "success",
-                "title": "🦅 PHOENIX AI",
-                "data": "నమస్తే! 🦅 నేను Phoenix AI. ఏదైనా అడుగు."
+
+                "title":
+                "🦅 PHOENIX AI",
+
+                "data":
+                "నమస్తే! 🦅 నేను Phoenix AI. ఏదైనా అడుగు."
             })
 
 
-        # -------------------------------------------------
-        # AI ENGINE
-        # -------------------------------------------------
+        # =================================================
+        # AI
+        # =================================================
 
-        answer = phoenix_engine(user_query)
+        answer = phoenix_engine(
+            user_query
+        )
 
 
-        # -------------------------------------------------
+        # =================================================
         # FINAL RESPONSE
-        # -------------------------------------------------
+        # =================================================
 
         return jsonify({
+
             "status": "success",
-            "title": "🦅 PHOENIX AI",
-            "data": answer
+
+            "title":
+            "🦅 PHOENIX AI",
+
+            "data":
+            answer
         })
 
 
     except Exception as e:
 
         return jsonify({
+
             "status": "error",
-            "title": "🦅 PHOENIX AI ERROR",
-            "data": f"సమస్య: {str(e)}"
+
+            "title":
+            "🦅 PHOENIX AI ERROR",
+
+            "data":
+            "ప్రస్తుతం Phoenix AIకి AI serviceలో సమస్య ఉంది. "
+            "కొద్దిసేపటి తర్వాత మళ్లీ ప్రయత్నించండి."
+
         }), 500
 
 
@@ -411,9 +706,14 @@ def run_ai():
 
 if __name__ == "__main__":
 
-    port = int(os.environ.get("PORT", 10000))
+    port = int(
+        os.environ.get(
+            "PORT",
+            10000
+        )
+    )
 
     app.run(
         host="0.0.0.0",
         port=port
-    )
+)
