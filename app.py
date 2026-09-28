@@ -11,6 +11,7 @@ app = Flask(__name__)
 CORS(app)
 
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+# Default model ని 'gemini-2.5-flash' గా ఉంచాము (ఇది చాలా వేగంగా రెస్పాన్స్ ఇస్తుంది)
 GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
 
 gemini_client = None
@@ -24,17 +25,16 @@ if GEMINI_API_KEY:
 
 PHOENIX_INSTRUCTIONS = """
 You are PHOENIX AI. Creator: Rajesh.
-(నీ పాత instructions అన్నీ ఇక్కడ అలాగే ఉంచు — అవి బాగున్నాయి)
+(మీ పాత ఇన్‌స్ట్రక్షన్స్‌ని ఇక్కడ యధాతథంగా ఉంచండి)
 """
 
-
 def ask_gemini(user_message: str) -> str:
-    """Retry logic tho robust Gemini call."""
+    """Retry logic తో కూడిన Gemini కాల్."""
     if gemini_client is None:
-        return "GEMINI_API_KEY set avvaledu. Server env lo key pettu."
+        return "Error: GEMINI_API_KEY సెట్ అవ్వలేదు. Render dashboard లో Environment Variable పెట్టండి."
 
     last_error = None
-    for attempt in range(3):  # 3 retries
+    for attempt in range(3):  # 3 సార్లు ట్రై చేస్తుంది
         try:
             response = gemini_client.models.generate_content(
                 model=GEMINI_MODEL,
@@ -42,46 +42,34 @@ def ask_gemini(user_message: str) -> str:
                 config=types.GenerateContentConfig(
                     system_instruction=PHOENIX_INSTRUCTIONS,
                     temperature=0.7,
-                    max_output_tokens=2048,
+                    max_output_tokens=1024, # టైమౌట్ కాకుండా ఉండటానికి టోకెన్స్ కొద్దిగా తగ్గించాము
                 ),
             )
             if response and response.text:
                 return response.text.strip()
-            return "Sorry, empty response vachindi. Malli try cheyyi."
-
+            
         except Exception as e:
             last_error = str(e)
-            wait = 2 ** attempt  # 1s, 2s, 4s backoff
-            print(f"Attempt {attempt + 1} failed: {last_error}, retrying in {wait}s")
-            time.sleep(wait)
-
-    return f"Server busy / API error. Konchem tarvata try cheyyi. (Details: {last_error})"
-
-
-@app.route("/", methods=["GET"])
-def home():
-    return jsonify({"status": "Phoenix AI Brain V1 running"})
+            print(f"Attempt {attempt + 1} failed: {last_error}")
+            time.sleep(1)  # మళ్లీ ట్రై చేయడానికి ముందు 1 సెకన్ ఆగుతుంది
+            
+    # 3 సార్లు ఫెయిల్ అయితే ఈ ఎర్రర్ రిటర్న్ అవుతుంది
+    return f"Sorry, Gemini API కనెక్ట్ అవ్వడంలో సమస్య వచ్చింది. Error: {last_error}"
 
 
-@app.route("/chat", methods=["POST"])
-def chat():
-    try:
-        data = request.get_json(silent=True)
-        if not data or "message" not in data:
-            return jsonify({"reply": "Message ledhu. JSON body lo 'message' field pampu."}), 400
+# మీ URL పనిచేయడానికి '/run' రూట్ (Route)
+@app.route('/run', methods=['GET', 'POST'])
+def run_query():
+    # GET రిక్వెస్ట్ ఐతే URL నుండి, POST ఐతే JSON నుండి query ని తీసుకుంటుంది
+    query = request.args.get('query') or request.json.get('query', '')
+    
+    if not query:
+        return jsonify({"error": "Query parameter missing"}), 400
+        
+    reply = ask_gemini(query)
+    return jsonify({"response": reply})
 
-        user_message = str(data["message"]).strip()
-        if not user_message:
-            return jsonify({"reply": "Khali message pampavu."}), 400
-
-        reply = ask_gemini(user_message)
-        return jsonify({"reply": reply})
-
-    except Exception as e:
-        print("Chat endpoint error:", e)
-        return jsonify({"reply": "Internal error, malli try cheyyi."}), 500
-
-
-if __name__ == "__main__":
-    port = int(os.getenv("PORT", 5000))
-    app.run(host="0.0.0.0", port=port)
+# లోకల్‌గా టెస్ట్ చేసుకోవడానికి
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+    
