@@ -56,3 +56,7 @@ def run_query():
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
+# హోమ్ పేజీ కోసం రూట్ (యాప్ నడుస్తుందో లేదో తెలుసుకోవడానికి)
+@app.route('/', methods=['GET'])
+def home():
+    return "Phoenix AI Backend is Running Successfully!"
