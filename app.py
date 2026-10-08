@@ -1,8 +1,12 @@
 import os
 import re
 import json
+import time
+import math
 import urllib.request
+import urllib.parse
 import urllib.error
+from datetime import datetime, timezone
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -12,7 +16,7 @@ from google.genai import types
 
 
 # =========================================================
-# 🦅 PHOENIX AI
+# PHOENIX AI BACKEND
 # =========================================================
 
 app = Flask(__name__)
@@ -20,13 +24,26 @@ CORS(app)
 
 
 # =========================================================
-# 🔐 ENVIRONMENT VARIABLES
+# ENVIRONMENT VARIABLES
 # =========================================================
 
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 
-TENNIS_API_KEY = os.getenv("TENNIS_API_KEY")
+GEMINI_MODEL = os.getenv(
+    "GEMINI_MODEL",
+    "gemini-3.8-flash"
+).strip()
+
+TENNIS_API_KEY = os.getenv(
+    "TENNIS_API_KEY",
+    ""
+).strip()
+
+ENABLE_WEB_SEARCH = os.getenv(
+    "ENABLE_WEB_SEARCH",
+    "true"
+).lower() == "true"
+
 
 TENNIS_BASE_URL = (
     "https://api.livetennisapi.com/api/public/v1"
@@ -34,7 +51,7 @@ TENNIS_BASE_URL = (
 
 
 # =========================================================
-# 🤖 GEMINI CLIENT
+# GEMINI CLIENT
 # =========================================================
 
 gemini_client = None
@@ -44,13 +61,13 @@ if GEMINI_API_KEY:
         gemini_client = genai.Client(
             api_key=GEMINI_API_KEY
         )
-        print("🦅 Gemini client READY")
+        print("PHOENIX: Gemini client ready")
     except Exception as e:
-        print("Gemini client error:", str(e))
+        print("PHOENIX: Gemini client error:", e)
 
 
 # =========================================================
-# 🧠 PHOENIX SYSTEM
+# PHOENIX SYSTEM INSTRUCTIONS
 # =========================================================
 
 PHOENIX_INSTRUCTIONS = """
@@ -58,964 +75,950 @@ You are PHOENIX AI.
 
 Creator: Rajesh.
 
-You are a friendly, practical and intelligent AI assistant.
+You are a friendly, intelligent mobile AI assistant.
 
-The user may ask about:
-- General knowledge
-- Education
-- Coding
-- Technology
-- AI
-- English
-- Finance education
-- Sports
-- Tennis
-- Cricket
-- Stocks
-- Latest information
+Important rules:
 
-Answer in simple Telugu when the user asks in Telugu.
-
-If the user asks in English, answer in English.
-
-For mixed Telugu-English questions, naturally use both.
-
-Be honest.
-Do not invent live information.
-Do not claim guaranteed predictions.
-
-For sports predictions:
-Give analysis based on the available current information.
-Never say a player is guaranteed to win.
-
-Avoid unnecessary Markdown formatting.
+1. Understand the user's complete question before answering.
+2. Answer in simple Telugu when the user speaks Telugu.
+3. If the user asks in English, answer in simple English unless Telugu explanation is useful.
+4. For current/latest/today/news questions, use live web search when available.
+5. Never pretend old knowledge is current.
+6. If information is uncertain, clearly say that it is uncertain.
+7. For sports, do not invent scores or results.
+8. For finance, clearly separate facts, analysis and estimates.
+9. Keep answers mobile-friendly.
+10. Do not use unnecessary Markdown decorations.
+11. Do not use repeated asterisks.
+12. Do not use huge headings.
+13. Be direct and useful.
+14. Never claim an estimated sports probability is official unless the API provides an official probability.
 """
 
 
 # =========================================================
-# 🧹 CLEAN RESPONSE
+# RESPONSE CLEANER
 # =========================================================
 
 def clean_response(text):
-
     if not text:
-        return "సమాధానం రాలేదు."
+        return "PHOENIX: No response received."
 
     text = str(text).strip()
 
+    # Remove common markdown decoration
     text = text.replace("**", "")
     text = text.replace("__", "")
+    text = text.replace("###", "")
+    text = text.replace("##", "")
+    text = text.replace("---", "")
 
-    text = re.sub(
-        r"(?m)^\s*#{1,6}\s*",
-        "",
-        text
-    )
-
-    text = re.sub(
-        r"\n{3,}",
-        "\n\n",
-        text
-    )
+    # Remove excessive blank lines
+    text = re.sub(r"\n{3,}", "\n\n", text)
 
     return text.strip()
 
 
 # =========================================================
-# 🤖 GEMINI
+# WEB QUERY DETECTION
 # =========================================================
 
-def ask_gemini(user_message):
+def is_web_query(query):
+    q = query.lower().strip()
 
-    if not gemini_client:
-        return (
-            "PHOENIX AIకి Gemini కనెక్షన్ లేదు."
-        )
+    web_words = [
+        "latest",
+        "today",
+        "current",
+        "now",
+        "news",
+        "recent",
+        "update",
+        "updates",
+        "live news",
+        "tv9",
+        "tv9 ap",
+        "tv9 telugu",
+        "andhra pradesh",
+        "andhra",
+        "ap news",
+        "telugu news",
+        "breaking news",
+        "ఈరోజు",
+        "ఇప్పుడు",
+        "తాజా",
+        "వార్తలు",
+        "న్యూస్",
+        "లేటెస్ట్",
+        "ప్రస్తుతం",
+        "అప్డేట్",
+        "ఏం జరిగింది",
+        "ఏం జరుగుతోంది"
+    ]
 
-    try:
-
-        response = gemini_client.models.generate_content(
-
-            model=GEMINI_MODEL,
-
-            contents=user_message,
-
-            config=types.GenerateContentConfig(
-
-                system_instruction=PHOENIX_INSTRUCTIONS,
-
-                temperature=0.7,
-
-                max_output_tokens=2048
-            )
-        )
-
-        if response and response.text:
-
-            return clean_response(
-                response.text
-            )
-
-        return "PHOENIXకి సమాధానం రాలేదు."
-
-    except Exception as e:
-
-        print(
-            "Gemini error:",
-            str(e)
-        )
-
-        return (
-            "PHOENIX AI ప్రస్తుతం అందుబాటులో లేదు."
-        )
+    return any(word in q for word in web_words)
 
 
 # =========================================================
-# 🌐 TENNIS API REQUEST
+# TENNIS QUERY DETECTION
+# =========================================================
+
+def is_tennis_query(query):
+    q = query.lower().strip()
+
+    tennis_words = [
+        "tennis",
+        "tennis match",
+        "live tennis",
+        "tennis live",
+        "tennis score",
+        "tennis scores",
+        "atp",
+        "wta",
+        "itf",
+        "challenger",
+        "grand slam",
+        "wimbledon",
+        "roland garros",
+        "french open",
+        "us open",
+        "australian open",
+        "serve",
+        "set score",
+        "tennis player",
+        "టెన్నిస్",
+        "టెన్నిస్ మ్యాచ్",
+        "టెన్నిస్ స్కోర్",
+        "లైవ్ టెన్నిస్",
+        "టెన్నిస్ ఎవరు",
+    ]
+
+    return any(word in q for word in tennis_words)
+
+
+# =========================================================
+# GEMINI AI
+# =========================================================
+
+def ask_gemini(user_message, use_web=False):
+
+    if gemini_client is None:
+        return (
+            "PHOENIX Error:\n"
+            "GEMINI_API_KEY Render Environment Variables లో లేదు."
+        )
+
+    last_error = None
+
+    for attempt in range(2):
+
+        try:
+
+            config_kwargs = {
+                "system_instruction": PHOENIX_INSTRUCTIONS,
+                "temperature": 0.7,
+                "max_output_tokens": 2048,
+            }
+
+            # Google Search grounding
+            if use_web and ENABLE_WEB_SEARCH:
+                config_kwargs["tools"] = [
+                    types.Tool(
+                        google_search=types.GoogleSearch()
+                    )
+                ]
+
+            response = gemini_client.models.generate_content(
+                model=GEMINI_MODEL,
+                contents=user_message,
+                config=types.GenerateContentConfig(
+                    **config_kwargs
+                )
+            )
+
+            if response and response.text:
+                return clean_response(response.text)
+
+            last_error = "Empty Gemini response."
+
+        except Exception as e:
+
+            last_error = str(e)
+
+            print(
+                f"Gemini attempt {attempt + 1} failed: "
+                f"{last_error}"
+            )
+
+            time.sleep(1)
+
+    return (
+        "PHOENIX AI ప్రస్తుతం response ఇవ్వలేకపోయింది.\n"
+        "కొద్దిసేపటి తర్వాత మళ్లీ try చేయండి."
+    )
+
+
+# =========================================================
+# TENNIS API REQUEST
 # =========================================================
 
 def tennis_request(endpoint):
 
     if not TENNIS_API_KEY:
-
         return {
-            "ok": False,
-            "error": "TENNIS_API_KEY_MISSING"
+            "error": "TENNIS_API_KEY Render Environment Variables లో లేదు."
         }
-
 
     url = TENNIS_BASE_URL + endpoint
 
-
-    headers = {
-        "X-API-Key": TENNIS_API_KEY,
-        "Accept": "application/json",
-        "User-Agent": "PHOENIX-AI/1.0"
-    }
-
-
-    req = urllib.request.Request(
+    request_obj = urllib.request.Request(
         url,
-        headers=headers,
+        headers={
+            "X-API-Key": TENNIS_API_KEY,
+            "Accept": "application/json",
+            "User-Agent": "PHOENIX-AI/1.0"
+        },
         method="GET"
     )
-
 
     try:
 
         with urllib.request.urlopen(
-            req,
+            request_obj,
             timeout=15
         ) as response:
 
-            raw = response.read().decode(
-                "utf-8"
-            )
+            raw = response.read().decode("utf-8")
 
-            data = json.loads(raw)
-
-            return {
-                "ok": True,
-                "data": data
-            }
-
+            return json.loads(raw)
 
     except urllib.error.HTTPError as e:
 
-        body = ""
-
         try:
-            body = e.read().decode(
-                "utf-8"
-            )
+            body = e.read().decode("utf-8")
         except:
-            pass
+            body = ""
 
         print(
-            "Tennis HTTP error:",
+            "Tennis API HTTP Error:",
             e.code,
             body
         )
 
         return {
-            "ok": False,
-            "status_code": e.code,
-            "error": body or str(e)
+            "error": f"Tennis API HTTP {e.code}",
+            "details": body
         }
-
 
     except Exception as e:
 
         print(
-            "Tennis connection error:",
+            "Tennis API error:",
             str(e)
         )
 
         return {
-            "ok": False,
             "error": str(e)
         }
 
 
 # =========================================================
-# 🎾 PLAYER NAME HELPER
+# TEXT / NUMBER HELPERS
 # =========================================================
 
-def get_player_name(player):
+def safe_int(value, default=0):
 
-    if not player:
+    try:
+        return int(value)
+    except:
+        return default
+
+
+def clean_name(value):
+
+    if value is None:
         return "Unknown"
 
-    if isinstance(player, str):
-        return player
-
-    if isinstance(player, dict):
-
-        for key in [
-            "name",
-            "full_name",
-            "display_name"
-        ]:
-
-            value = player.get(key)
-
-            if value:
-                return str(value)
-
-        first = player.get("first_name", "")
-        last = player.get("last_name", "")
-
-        name = (
-            str(first) + " " + str(last)
-        ).strip()
-
-        if name:
-            return name
-
-    return "Unknown"
+    return str(value).strip()
 
 
 # =========================================================
-# 🎾 EXTRACT PLAYERS
+# PLAYER / TEAM NAMES
 # =========================================================
 
-def extract_players(match):
+def get_player_names(match):
 
-    players = match.get(
-        "players",
-        {}
-    )
+    # First try direct fields
+    p1 = match.get("player1_name")
+    p2 = match.get("player2_name")
 
-    p1 = None
-    p2 = None
+    if p1 and p2:
+        return clean_name(p1), clean_name(p2)
 
+    # Then try players object
+    players = match.get("players")
 
     if isinstance(players, dict):
 
-        p1 = (
-            players.get("p1")
-            or players.get("player1")
-            or players.get("1")
-        )
+        p1_obj = players.get("p1") or {}
+        p2_obj = players.get("p2") or {}
 
-        p2 = (
-            players.get("p2")
-            or players.get("player2")
-            or players.get("2")
-        )
+        if isinstance(p1_obj, dict):
+            p1 = p1_obj.get("name")
 
+        if isinstance(p2_obj, dict):
+            p2 = p2_obj.get("name")
 
-    elif isinstance(players, list):
-
-        if len(players) > 0:
-            p1 = players[0]
-
-        if len(players) > 1:
-            p2 = players[1]
-
+        if p1 and p2:
+            return (
+                clean_name(p1),
+                clean_name(p2)
+            )
 
     return (
-        get_player_name(p1),
-        get_player_name(p2)
+        "Player / Team A",
+        "Player / Team B"
     )
 
 
 # =========================================================
-# 🎾 SCORE FORMAT
+# SET SCORE
 # =========================================================
 
-def format_sets(sets):
+def get_set_score(sets):
 
-    if not sets:
-        return "Score unavailable"
+    if not isinstance(sets, list):
+        return 0, 0
+
+    # Official API shape:
+    # [1, 0]
+    if (
+        len(sets) >= 2
+        and not isinstance(sets[0], list)
+        and not isinstance(sets[1], list)
+    ):
+        return (
+            safe_int(sets[0]),
+            safe_int(sets[1])
+        )
+
+    # Compatibility with nested shape
+    if (
+        len(sets) >= 2
+        and isinstance(sets[0], list)
+        and isinstance(sets[1], list)
+    ):
+        a = safe_int(sets[0][0]) if sets[0] else 0
+        b = safe_int(sets[1][0]) if sets[1] else 0
+        return a, b
+
+    return 0, 0
+
+
+# =========================================================
+# GAME SCORE
+# =========================================================
+
+def get_games(games):
+
+    if not isinstance(games, list):
+        return [], []
+
+    if len(games) < 2:
+        return [], []
+
+    p1 = games[0] if isinstance(games[0], list) else []
+    p2 = games[1] if isinstance(games[1], list) else []
+
+    p1 = [safe_int(x) for x in p1]
+    p2 = [safe_int(x) for x in p2]
+
+    return p1, p2
+
+
+def format_games(games):
+
+    p1, p2 = get_games(games)
+
+    if not p1 or not p2:
+        return "Unavailable"
+
+    pairs = []
+
+    total = max(
+        len(p1),
+        len(p2)
+    )
+
+    for i in range(total):
+
+        a = p1[i] if i < len(p1) else 0
+        b = p2[i] if i < len(p2) else 0
+
+        pairs.append(
+            f"{a}-{b}"
+        )
+
+    return " | ".join(pairs)
+
+
+# =========================================================
+# CURRENT GAME DIFFERENCE
+# =========================================================
+
+def current_game_difference(games):
+
+    p1, p2 = get_games(games)
+
+    if not p1 or not p2:
+        return 0
+
+    a = p1[-1]
+    b = p2[-1]
+
+    return a - b
+
+
+def total_game_difference(games):
+
+    p1, p2 = get_games(games)
+
+    return (
+        sum(p1) - sum(p2)
+    )
+
+
+# =========================================================
+# POINT SCORE
+# =========================================================
+
+POINT_VALUES = {
+    "0": 0,
+    "15": 1,
+    "30": 2,
+    "40": 3,
+    "A": 4,
+    "AD": 4,
+    "ADV": 4,
+    "adv": 4,
+}
+
+
+def point_value(point):
+
+    if point is None:
+        return 0
+
+    value = str(point).strip()
+
+    return POINT_VALUES.get(
+        value,
+        0
+    )
+
+
+def get_point_difference(points):
+
+    if not isinstance(points, list):
+        return 0
+
+    if len(points) < 2:
+        return 0
+
+    return (
+        point_value(points[0])
+        -
+        point_value(points[1])
+    )
+
+
+def format_points(points):
+
+    if not isinstance(points, list):
+        return "Unavailable"
+
+    if len(points) < 2:
+        return "Unavailable"
+
+    return (
+        f"{points[0]} - {points[1]}"
+    )
+
+
+# =========================================================
+# START TIME → IST
+# =========================================================
+
+def format_ist_time(value):
+
+    if not value:
+        return "Start time unavailable"
 
     try:
 
-        return "  ".join(
-            f"{s[0]}-{s[1]}"
-            for s in sets
-            if isinstance(s, list)
-            and len(s) >= 2
+        text = str(value).strip()
+
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+
+        dt = datetime.fromisoformat(text)
+
+        if dt.tzinfo is None:
+            dt = dt.replace(
+                tzinfo=timezone.utc
+            )
+
+        # IST = UTC + 5:30
+        from datetime import timedelta
+
+        ist = dt.astimezone(
+            timezone(
+                timedelta(hours=5, minutes=30)
+            )
         )
 
-    except:
+        return ist.strftime(
+            "%d %b %Y, %I:%M %p IST"
+        )
 
-        return str(sets)
+    except Exception:
+
+        return str(value)
 
 
 # =========================================================
-# 🎾 WINNER ANALYSIS
+# GET START TIME
 # =========================================================
 
-def estimate_leader(match):
+def get_start_time(match):
 
-    score = match.get(
-        "score"
-    ) or {}
+    value = (
+        match.get("start_time")
+        or match.get("scheduled_start")
+        or match.get("startTime")
+    )
 
-    sets = score.get(
-        "sets"
-    ) or []
+    if value:
+        return value
 
-    if not sets:
+    fixture = match.get("fixture")
+
+    if isinstance(fixture, dict):
+
         return (
-            "ప్రస్తుతం winner prediction ఇవ్వడానికి "
-            "తగిన score లేదు."
+            fixture.get("start_time")
+            or fixture.get("startTime")
         )
 
+    return None
 
-    p1, p2 = extract_players(
+
+# =========================================================
+# FAVOURITE ESTIMATION
+# =========================================================
+
+def estimate_favourite(
+    sets,
+    games,
+    points,
+    server
+):
+
+    set1, set2 = get_set_score(sets)
+
+    game_diff = total_game_difference(
+        games
+    )
+
+    current_diff = current_game_difference(
+        games
+    )
+
+    point_diff = get_point_difference(
+        points
+    )
+
+    # Main score
+    advantage = 0.0
+
+    # Set lead is the strongest signal
+    advantage += (
+        (set1 - set2) * 1.25
+    )
+
+    # Overall game advantage
+    advantage += (
+        game_diff * 0.08
+    )
+
+    # Current set advantage
+    advantage += (
+        current_diff * 0.12
+    )
+
+    # Current point advantage
+    advantage += (
+        point_diff * 0.12
+    )
+
+    # Server has a small live advantage
+    if server == 1:
+        advantage += 0.08
+
+    elif server == 2:
+        advantage -= 0.08
+
+    # Convert to probability
+    probability = (
+        100.0
+        /
+        (
+            1.0
+            +
+            math.exp(
+                -advantage
+            )
+        )
+    )
+
+    # Avoid fake 100% certainty
+    probability = max(
+        5,
+        min(
+            95,
+            round(probability)
+        )
+    )
+
+    p1 = probability
+    p2 = 100 - p1
+
+    return p1, p2
+
+
+# =========================================================
+# FAVOURITE REASONS
+# =========================================================
+
+def favourite_reasons(
+    p1_name,
+    p2_name,
+    sets,
+    games,
+    points,
+    server,
+    p1_probability
+):
+
+    set1, set2 = get_set_score(sets)
+
+    game_diff = total_game_difference(
+        games
+    )
+
+    point_diff = get_point_difference(
+        points
+    )
+
+    reasons = []
+
+    if set1 > set2:
+        reasons.append(
+            f"{p1_name} has {set1}-{set2} set lead"
+        )
+
+    elif set2 > set1:
+        reasons.append(
+            f"{p2_name} has {set2}-{set1} set lead"
+        )
+
+    if game_diff > 0:
+        reasons.append(
+            f"{p1_name} has game advantage"
+        )
+
+    elif game_diff < 0:
+        reasons.append(
+            f"{p2_name} has game advantage"
+        )
+
+    if point_diff > 0:
+        reasons.append(
+            f"{p1_name} has current point advantage"
+        )
+
+    elif point_diff < 0:
+        reasons.append(
+            f"{p2_name} has current point advantage"
+        )
+
+    if server == 1:
+        reasons.append(
+            f"{p1_name} is serving"
+        )
+
+    elif server == 2:
+        reasons.append(
+            f"{p2_name} is serving"
+        )
+
+    if not reasons:
+        reasons.append(
+            "Current score is very balanced"
+        )
+
+    return reasons[:3]
+
+
+# =========================================================
+# BAR
+# =========================================================
+
+def make_bar(percent, width=20):
+
+    filled = round(
+        (percent / 100) * width
+    )
+
+    filled = max(
+        0,
+        min(
+            width,
+            filled
+        )
+    )
+
+    return (
+        "█" * filled
+        +
+        "░" * (width - filled)
+    )
+
+
+# =========================================================
+# FORMAT ONE TENNIS MATCH
+# =========================================================
+
+def format_tennis_match(
+    match,
+    number,
+    status="LIVE"
+):
+
+    p1_name, p2_name = get_player_names(
         match
     )
 
-
-    p1_sets = 0
-    p2_sets = 0
-
-
-    try:
-
-        for s in sets:
-
-            if (
-                isinstance(s, list)
-                and len(s) >= 2
-            ):
-
-                if s[0] > s[1]:
-                    p1_sets += 1
-
-                elif s[1] > s[0]:
-                    p2_sets += 1
-
-    except:
-        pass
-
-
-    if p1_sets > p2_sets:
-
-        return (
-            f"ప్రస్తుతం {p1} ముందంజలో ఉన్నారు. "
-            f"Live score ఆధారంగా {p1}కి advantage ఉంది."
-        )
-
-
-    if p2_sets > p1_sets:
-
-        return (
-            f"ప్రస్తుతం {p2} ముందంజలో ఉన్నారు. "
-            f"Live score ఆధారంగా {p2}కి advantage ఉంది."
-        )
-
-
-    return (
-        "ఇద్దరూ ప్రస్తుతం సమానంగా ఉన్నారు. "
-        "Match close గా ఉంది."
+    tournament = (
+        match.get("tournament")
+        or match.get("competition")
+        or match.get("event")
+        or "Tennis"
     )
+
+    tour = (
+        match.get("tour")
+        or match.get("category")
+        or ""
+    )
+
+    score = match.get("score") or {}
+
+    sets = score.get("sets") or []
+
+    games = score.get("games") or []
+
+    points = score.get("points") or []
+
+    server = score.get("server")
+
+    set1, set2 = get_set_score(
+        sets
+    )
+
+    games_text = format_games(
+        games
+    )
+
+    points_text = format_points(
+        points
+    )
+
+    # Server
+    if server == 1:
+        server_name = p1_name
+    elif server == 2:
+        server_name = p2_name
+    else:
+        server_name = "Unknown"
+
+    # Favourite estimate
+    p1_probability, p2_probability = (
+        estimate_favourite(
+            sets,
+            games,
+            points,
+            server
+        )
+    )
+
+    if p1_probability >= p2_probability:
+
+        favourite = p1_name
+        favourite_percent = p1_probability
+
+    else:
+
+        favourite = p2_name
+        favourite_percent = p2_probability
+
+    reasons = favourite_reasons(
+        p1_name,
+        p2_name,
+        sets,
+        games,
+        points,
+        server,
+        p1_probability
+    )
+
+    start_time = get_start_time(
+        match
+    )
+
+    start_time_text = format_ist_time(
+        start_time
+    )
+
+    # Header
+    if status.upper() == "LIVE":
+        header = "🔴 LIVE"
+    else:
+        header = "🕒 UPCOMING"
+
+    output = []
+
+    output.append(
+        f"━━━━━━━━━━━━━━━━━━━━"
+    )
+
+    output.append(
+        f"🎾 MATCH {number}   {header}"
+    )
+
+    output.append(
+        f"🏆 {tournament}"
+    )
+
+    if tour:
+        output.append(
+            f"🌍 Tour: {tour}"
+        )
+
+    output.append(
+        f"⏰ Start: {start_time_text}"
+    )
+
+    output.append("")
+
+    output.append(
+        f"👥 {p1_name}"
+    )
+
+    output.append(
+        "VS"
+    )
+
+    output.append(
+        f"👥 {p2_name}"
+    )
+
+    output.append("")
+
+    output.append(
+        f"📊 SETS: {set1} - {set2}"
+    )
+
+    output.append(
+        f"🎯 GAMES: {games_text}"
+    )
+
+    output.append(
+        f"🎾 POINT: {points_text}"
+    )
+
+    if status.upper() == "LIVE":
+
+        output.append(
+            f"🏓 Serving: {server_name}"
+        )
+
+        output.append("")
+
+        output.append(
+            "🔥 PHOENIX LIVE ADVANTAGE"
+        )
+
+        output.append(
+            f"{p1_name}: {p1_probability}%"
+        )
+
+        output.append(
+            make_bar(p1_probability)
+        )
+
+        output.append(
+            f"{p2_name}: {p2_probability}%"
+        )
+
+        output.append(
+            make_bar(p2_probability)
+        )
+
+        output.append("")
+
+        output.append(
+            f"⭐ CURRENT FAVOURITE:"
+        )
+
+        output.append(
+            f"{favourite}"
+        )
+
+        output.append(
+            f"📈 Estimated Win Chance: "
+            f"{favourite_percent}%"
+        )
+
+        output.append("")
+
+        output.append(
+            "📌 Why?"
+        )
+
+        for reason in reasons:
+            output.append(
+                f"• {reason}"
+            )
+
+        output.append("")
+
+        output.append(
+            "⚠️ PHOENIX estimate — "
+            "not an official bookmaker/API probability."
+        )
+
+    return "\n".join(output)
 
 
 # =========================================================
-# 🎾 LIVE TENNIS
+# LIVE TENNIS
 # =========================================================
 
 def get_live_tennis():
 
-    result = tennis_request(
+    data = tennis_request(
         "/matches?status=live&limit=50"
     )
 
-
-    if not result.get("ok"):
-
-        return {
-            "ok": False,
-            "message": (
-                "🎾 Tennis Live API కనెక్ట్ కాలేదు."
-            ),
-            "details": result
-        }
-
-
-    payload = result.get(
-        "data",
-        {}
-    )
-
-
-    matches = payload.get(
-        "data",
-        []
-    )
-
-
-    if not matches:
-
-        return {
-            "ok": True,
-            "matches": [],
-            "message": (
-                "🎾 ప్రస్తుతం Live Tennis matches "
-                "కనిపించడం లేదు."
-            )
-        }
-
-
-    output = []
-
-
-    for match in matches:
-
-        p1, p2 = extract_players(
-            match
-        )
-
-
-        score = match.get(
-            "score"
-        ) or {}
-
-
-        sets = score.get(
-            "sets"
-        ) or []
-
-
-        games = score.get(
-            "games"
-        )
-
-
-        points = score.get(
-            "points"
-        )
-
-
-        server = score.get(
-            "server"
-        )
-
-
-        output.append({
-
-            "id": match.get("id"),
-
-            "tournament": match.get(
-                "tournament"
-            ),
-
-            "tour": match.get(
-                "tour"
-            ),
-
-            "surface": match.get(
-                "surface"
-            ),
-
-            "round": match.get(
-                "round"
-            ),
-
-            "status": match.get(
-                "status"
-            ),
-
-            "event_status": match.get(
-                "event_status"
-            ),
-
-            "player1": p1,
-
-            "player2": p2,
-
-            "sets": sets,
-
-            "games": games,
-
-            "points": points,
-
-            "server": server,
-
-            "score_text": format_sets(
-                sets
-            ),
-
-            "stale": score.get(
-                "stale"
-            ),
-
-            "age_seconds": score.get(
-                "age_seconds"
-            ),
-
-            "leader_analysis":
-                estimate_leader(match)
-        })
-
-
-    return {
-
-        "ok": True,
-
-        "count": len(output),
-
-        "matches": output
-
-    }
-
-
-# =========================================================
-# 🎾 TENNIS RESPONSE FOR USER
-# =========================================================
-
-def tennis_text_response():
-
-    data = get_live_tennis()
-
-
-    if not data.get("ok"):
-
-        return (
-            "🎾 PHOENIX Tennis Live\n\n"
-            + data.get(
-                "message",
-                "Tennis data unavailable."
-            )
-        )
-
-
-    matches = data.get(
-        "matches",
-        []
-    )
-
-
-    if not matches:
-
-        return data.get(
-            "message",
-            "🎾 ప్రస్తుతం Live matches లేవు."
-        )
-
-
-    lines = [
-
-        "🎾 PHOENIX LIVE TENNIS",
-
-        f"Live Matches: {len(matches)}",
-
-        ""
-    ]
-
-
-    for index, match in enumerate(
-        matches,
-        start=1
-    ):
-
-        lines.append(
-            f"🎾 Match {index}"
-        )
-
-        lines.append(
-            f"👤 {match['player1']} vs "
-            f"{match['player2']}"
-        )
-
-
-        if match.get("tournament"):
-
-            lines.append(
-                f"🏆 {match['tournament']}"
-            )
-
-
-        if match.get("tour"):
-
-            lines.append(
-                f"🌐 Tour: {match['tour']}"
-            )
-
-
-        lines.append(
-            f"🔢 Score: {match['score_text']}"
-        )
-
-
-        if match.get("games"):
-
-            lines.append(
-                f"🎯 Games: {match['games']}"
-            )
-
-
-        if match.get("points"):
-
-            lines.append(
-                f"🎾 Points: {match['points']}"
-            )
-
-
-        if match.get("server"):
-
-            server_name = (
-                match["player1"]
-                if match["server"] == 1
-                else match["player2"]
-            )
-
-            lines.append(
-                f"🏓 Server: {server_name}"
-            )
-
-
-        lines.append(
-            "📊 "
-            + match["leader_analysis"]
-        )
-
-
-        lines.append("")
-
-
-    lines.append(
-        "ℹ️ Score is from the live tennis data feed."
-    )
-
-    return "\n".join(lines)
-
-
-# =========================================================
-# 🎯 TENNIS QUESTION DETECTOR
-# =========================================================
-
-def is_tennis_query(text):
-
-    text = text.lower()
-
-
-    keywords = [
-
-        "tennis",
-        "టెన్నిస్",
-
-        "atp",
-        "wta",
-
-        "sinner",
-        "alcaraz",
-        "djokovic",
-        "nadal",
-
-        "swiatek",
-        "sabalenka",
-        "gauff",
-
-        "live score",
-        "live match",
-
-        "టెన్నిస్ స్కోర్",
-        "టెన్నిస్ మ్యాచ్",
-
-        "ఎవరు గెలుస్తారు",
-        "ఎవరు గెలిచారు"
-
-    ]
-
-
-    return any(
-        keyword in text
-        for keyword in keywords
-    )
-
-
-# =========================================================
-# ❤️ HEALTH
-# =========================================================
-
-@app.route(
-    "/health",
-    methods=["GET"]
-)
-def health():
-
-    return jsonify({
-
-        "status": "ok",
-
-        "service": "PHOENIX AI",
-
-        "gemini":
-            "connected"
-            if gemini_client
-            else "not_configured",
-
-        "tennis":
-            "connected"
-            if TENNIS_API_KEY
-            else "not_configured",
-
-        "model":
-            GEMINI_MODEL
-
-    })
-
-
-# =========================================================
-# 🎾 DIRECT TENNIS API
-# =========================================================
-
-@app.route(
-    "/tennis/live",
-    methods=["GET"]
-)
-def tennis_live_route():
-
-    data = get_live_tennis()
-
-
-    if not data.get("ok"):
-
-        return jsonify({
-
-            "status": "error",
-
-            "title": "🎾 PHOENIX LIVE TENNIS",
-
-            "data": data
-
-        }), 500
-
-
-    return jsonify({
-
-        "status": "success",
-
-        "title": "🎾 PHOENIX LIVE TENNIS",
-
-        "data": data
-
-    })
-
-
-# =========================================================
-# 🧠 MAIN PHOENIX ROUTER
-# =========================================================
-
-@app.route(
-    "/run",
-    methods=["GET", "POST"]
-)
-def run_query():
-
-    try:
-
-        query = ""
-
-
-        if request.method == "GET":
-
-            query = request.args.get(
-                "query",
-                ""
-            )
-
-
-        elif request.method == "POST":
-
-            body = request.get_json(
-                silent=True
-            ) or {}
-
-            query = body.get(
-                "query",
-                ""
-            )
-
-            if not query:
-
-                query = request.args.get(
-                    "query",
-                    ""
-                )
-
-
-        query = str(
-            query
-        ).strip()
-
-
-        if not query:
-
-            return jsonify({
-
-                "status": "error",
-
-                "title": "🦅 PHOENIX AI",
-
-                "data":
-                    "దయచేసి మీ ప్రశ్నను పంపండి."
-
-            }), 400
-
-
-        print(
-            "PHOENIX QUERY:",
-            query
-        )
-
-
-        # =================================================
-        # 🎾 TENNIS ROUTER
-        # =================================================
-
-        if is_tennis_query(query):
-
-            answer = tennis_text_response()
-
-
-            return jsonify({
-
-                "status": "success",
-
-                "title":
-                    "🎾 PHOENIX LIVE TENNIS",
-
-                "data": answer
-
-            })
-
-
-        # =================================================
-        # 🧠 NORMAL AI
-        # =================================================
-
-        answer = ask_gemini(
-            query
-        )
-
-
-        return jsonify({
-
-            "status": "success",
-
-            "title":
-                "🦅 PHOENIX AI",
-
-            "data": answer
-
-        })
-
-
-    except Exception as e:
-
-        print(
-            "RUN ERROR:",
-            str(e)
-        )
-
-
-        return jsonify({
-
-            "status": "error",
-
-            "title":
-                "🦅 PHOENIX AI",
-
-            "data":
-                "PHOENIX server error వచ్చింది."
-
-        }), 500
-
-
-# =========================================================
-# 🏠 HOME
-# =========================================================
-
-@app.route(
-    "/",
-    methods=["GET"]
-)
-def home():
-
-    return """
-    🦅 PHOENIX AI Backend
-
-    Status: ONLINE
-
-    AI: READY
-
-    Tennis Live: READY
-
-    Endpoints:
-    /run
-    /tennis/live
-    /health
-    """
-
-
-# =========================================================
-# 🚀 START
-# =========================================================
-
-if __name__ == "__main__":
-
-    port = int(
-        os.environ.get(
-            "PORT",
-            5000
-        )
-    )
-
-
-    print(
-        "==================================="
-    )
-
-    print(
-        "🦅 PHOENIX AI SERVER"
-    )
-
-    print(
-        "Port:",
-        port
-    )
-
-    print(
-        "Gemini:",
-        bool(GEMINI_API_KEY)
-    )
-
-    print(
-        "Tennis:",
-        bool(TENNIS_API_KEY)
-    )
-
-    print(
-        "==================================="
-    )
-
-
-    app.run(
-        host="0.0.0.0",
-        port=port
-    )
+    if "
