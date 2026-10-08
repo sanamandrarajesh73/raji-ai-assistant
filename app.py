@@ -1021,4 +1021,368 @@ def get_live_tennis():
         "/matches?status=live&limit=50"
     )
 
-    if "
+    if "error" in data:
+        return data
+
+    matches = data.get("data", [])
+
+    return matches
+
+
+# =========================================================
+# UPCOMING TENNIS
+# =========================================================
+
+def get_upcoming_tennis():
+
+    data = tennis_request(
+        "/matches?status=upcoming&limit=50"
+    )
+
+    if "error" in data:
+        return data
+
+    return data.get(
+        "data",
+        []
+    )
+
+
+# =========================================================
+# TENNIS TEXT RESPONSE
+# =========================================================
+
+def tennis_text_response(query):
+
+    live_matches = get_live_tennis()
+
+    if isinstance(live_matches, dict):
+
+        return (
+            "🎾 PHOENIX Tennis Error\n\n"
+            +
+            str(
+                live_matches.get(
+                    "error",
+                    "Unknown error"
+                )
+            )
+        )
+
+    if not live_matches:
+
+        return (
+            "🎾 PHOENIX LIVE TENNIS\n\n"
+            "ప్రస్తుతం Live tennis matches "
+            "కనిపించలేదు."
+        )
+
+    output = []
+
+    output.append(
+        "🎾 PHOENIX LIVE TENNIS"
+    )
+
+    output.append(
+        f"🔴 Live Matches: {len(live_matches)}"
+    )
+
+    output.append("")
+
+    for index, match in enumerate(
+        live_matches,
+        start=1
+    ):
+
+        try:
+
+            output.append(
+                format_tennis_match(
+                    match,
+                    index,
+                    "LIVE"
+                )
+            )
+
+        except Exception as e:
+
+            print(
+                "Match formatting error:",
+                str(e)
+            )
+
+            output.append(
+                f"Match {index}: "
+                "Data formatting error"
+            )
+
+    return "\n\n".join(output)
+
+
+# =========================================================
+# UPCOMING TENNIS RESPONSE
+# =========================================================
+
+def upcoming_tennis_response():
+
+    matches = get_upcoming_tennis()
+
+    if isinstance(matches, dict):
+
+        return (
+            "🎾 PHOENIX UPCOMING TENNIS\n\n"
+            +
+            str(
+                matches.get(
+                    "error",
+                    "Unknown error"
+                )
+            )
+        )
+
+    if not matches:
+
+        return (
+            "🎾 Upcoming tennis matches "
+            "ప్రస్తుతం కనిపించలేదు."
+        )
+
+    output = []
+
+    output.append(
+        "🎾 PHOENIX UPCOMING TENNIS"
+    )
+
+    output.append(
+        f"🕒 Matches: {len(matches)}"
+    )
+
+    output.append("")
+
+    for index, match in enumerate(
+        matches,
+        start=1
+    ):
+
+        try:
+
+            output.append(
+                format_tennis_match(
+                    match,
+                    index,
+                    "UPCOMING"
+                )
+            )
+
+        except Exception as e:
+
+            print(
+                "Upcoming formatting error:",
+                str(e)
+            )
+
+    return "\n\n".join(output)
+
+
+# =========================================================
+# HEALTH
+# =========================================================
+
+@app.route(
+    "/health",
+    methods=["GET"]
+)
+def health():
+
+    return jsonify({
+        "status": "ok",
+        "service": "PHOENIX AI",
+        "gemini": bool(
+            GEMINI_API_KEY
+        ),
+        "tennis": bool(
+            TENNIS_API_KEY
+        ),
+        "web_search": ENABLE_WEB_SEARCH
+    })
+
+
+# =========================================================
+# LIVE TENNIS JSON API
+# =========================================================
+
+@app.route(
+    "/tennis/live",
+    methods=["GET"]
+)
+def tennis_live_api():
+
+    matches = get_live_tennis()
+
+    if isinstance(matches, dict):
+
+        return jsonify(
+            matches
+        ), 500
+
+    return jsonify({
+        "status": "success",
+        "count": len(matches),
+        "data": matches
+    })
+
+
+# =========================================================
+# UPCOMING TENNIS JSON API
+# =========================================================
+
+@app.route(
+    "/tennis/upcoming",
+    methods=["GET"]
+)
+def tennis_upcoming_api():
+
+    matches = get_upcoming_tennis()
+
+    if isinstance(matches, dict):
+
+        return jsonify(
+            matches
+        ), 500
+
+    return jsonify({
+        "status": "success",
+        "count": len(matches),
+        "data": matches
+    })
+
+
+# =========================================================
+# MAIN /run
+# =========================================================
+
+@app.route(
+    "/run",
+    methods=["GET", "POST"]
+)
+def run_query():
+
+    query = ""
+
+    # GET
+    if request.method == "GET":
+
+        query = request.args.get(
+            "query",
+            ""
+        )
+
+    # POST
+    elif request.method == "POST":
+
+        if request.is_json:
+
+            body = request.get_json(
+                silent=True
+            ) or {}
+
+            query = body.get(
+                "query",
+                ""
+            )
+
+        else:
+
+            query = request.form.get(
+                "query",
+                ""
+            )
+
+    query = str(
+        query
+    ).strip()
+
+    if not query:
+
+        return jsonify({
+            "status": "error",
+            "data": "Query parameter missing."
+        }), 400
+
+    print(
+        "PHOENIX QUERY:",
+        query
+    )
+
+    # -----------------------------------------------------
+    # TENNIS
+    # -----------------------------------------------------
+
+    if is_tennis_query(query):
+
+        answer = tennis_text_response(
+            query
+        )
+
+        return jsonify({
+            "status": "success",
+            "title": "🎾 PHOENIX LIVE TENNIS",
+            "data": answer
+        })
+
+
+    # -----------------------------------------------------
+    # WEB / CURRENT INFORMATION
+    # -----------------------------------------------------
+
+    web_needed = is_web_query(
+        query
+    )
+
+    answer = ask_gemini(
+        query,
+        use_web=web_needed
+    )
+
+    return jsonify({
+        "status": "success",
+        "title": "🦅 PHOENIX AI",
+        "data": answer
+    })
+
+
+# =========================================================
+# HOME
+# =========================================================
+
+@app.route(
+    "/",
+    methods=["GET"]
+)
+def home():
+
+    return (
+        "🦅 PHOENIX AI Backend is Online\n"
+        "AI: Ready\n"
+        "Tennis: Ready\n"
+        "Live Web Search: Ready"
+    )
+
+
+# =========================================================
+# RUN LOCAL
+# =========================================================
+
+if __name__ == "__main__":
+
+    port = int(
+        os.environ.get(
+            "PORT",
+            5000
+        )
+    )
+
+    app.run(
+        host="0.0.0.0",
+        port=port
+    )
