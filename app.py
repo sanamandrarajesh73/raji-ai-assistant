@@ -17,10 +17,11 @@ HTML_TEMPLATE = """
     <title>PHOENIX TENNIS LIVE</title>
     <style>
         body { background-color: #0d1b2a; color: white; font-family: Arial, sans-serif; padding: 20px; text-align: center; }
-        .chat-box { max-width: 600px; margin: auto; background: #1b263b; padding: 20px; border-radius: 10px; }
-        input { width: 80%; padding: 10px; margin: 10px 0; border-radius: 5px; border: none; }
-        button { padding: 10px 20px; background: #ff007f; color: white; border: none; border-radius: 5px; cursor: pointer; }
-        .response { margin-top: 20px; text-align: left; background: #415a77; padding: 15px; border-radius: 5px; white-space: pre-wrap; }
+        .chat-box { max-width: 600px; margin: auto; background: #1b263b; padding: 20px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        input { width: 80%; padding: 12px; margin: 10px 0; border-radius: 5px; border: none; font-size: 16px; }
+        button { padding: 12px 25px; background: #ff007f; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: bold; }
+        button:hover { background: #e00070; }
+        .response { margin-top: 20px; text-align: left; background: #415a77; padding: 15px; border-radius: 5px; white-space: pre-wrap; font-size: 15px; }
     </style>
 </head>
 <body>
@@ -41,13 +42,17 @@ HTML_TEMPLATE = """
             
             responseArea.innerHTML = "లోడ్ అవుతోంది...";
 
-            let res = await fetch("/chat", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ message: text })
-            });
-            let data = await res.json();
-            responseArea.innerHTML = data.reply;
+            try {
+                let res = await fetch("/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ message: text })
+                });
+                let data = await res.json();
+                responseArea.innerHTML = data.reply;
+            } catch (error) {
+                responseArea.innerHTML = "నెట్వర్క్ ఎర్రర్ వచ్చింది. దయచేసి మళ్లీ ప్రయత్నించండి.";
+            }
         }
     </script>
 </body>
@@ -62,16 +67,17 @@ def home():
 def chat():
     user_message = request.json.get("message", "")
     try:
-        # జెమినీ మోడల్ ద్వారా టెన్నిస్ లైవ్ లేదా అప్‌డేట్స్ పంపేలా ప్రాంప్ట్ ఇవ్వడం
         prompt = f"You are a tennis live assistant named Phoenix. User asks: {user_message}. Provide accurate tennis live scores, updates or upcoming matches information in Telugu or English as requested."
         
+        # సరికొత్త google-genai SDK కోసం మోడల్ పేరు
         response = client.models.generate_content(
             model="gemini-1.5-flash",
             contents=prompt,
         )
         return jsonify({"reply": response.text})
     except Exception as e:
-        return jsonify({"reply": f"ఎర్రర్ వచ్చింది: API కీ లేదా మోడల్ సరిగ్గా చెక్ చేయండి. ({str(e)})"})
+        return jsonify({"reply": f"ఎర్రర్ వచ్చింది: ({str(e)})"})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
+    
