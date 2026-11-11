@@ -66,13 +66,12 @@ def chat():
         prompt = f"You are a tennis live assistant named Phoenix. User asks: {user_message}. Provide accurate tennis live scores, updates or upcoming matches information in Telugu or English as requested."
         
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-1.5-flash",
             contents=prompt,
         )
         return jsonify({"reply": response.text})
     except Exception as e:
-        return jsonify({"reply": f"ఎర్రర్ వచ్చింది: ఏడాది లేదా API కీ సరిగ్గా చెక్ చేయండి. ({str(e)})"})
+        return jsonify({"reply": f"ఎర్రర్ వచ్చింది: API కీ లేదా మోడల్ సరిగ్గా చెక్ చేయండి. ({str(e)})"})
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
-  
