@@ -68,7 +68,7 @@ def chat():
         prompt = f"You are a tennis live assistant named Phoenix. User asks: {user_message}. Provide accurate tennis live scores, updates or upcoming matches information in Telugu or English as requested."
         
         response = client.models.generate_content(
-            model="gemini-1.5-flash",
+            model=gemini-3.8-flash
             contents=prompt,
         )
         return jsonify({"reply": response.text})
