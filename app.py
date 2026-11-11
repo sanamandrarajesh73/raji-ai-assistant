@@ -4,10 +4,8 @@ from google import genai
 
 app = Flask(__name__)
 
-# జెమినీ క్లైంట్‌ని ఇనిషియలైజ్ చేయడం (Render లో సేవ్ చేసిన GEMINI_API_KEY ఆటోమేటిక్‌గా తీసుకుంటుంది)
 client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
 
-# HTML ఇంటర్‌ఫేస్ (మీ యాప్ డిజైన్ కోసం)
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="te">
@@ -69,7 +67,6 @@ def chat():
     try:
         prompt = f"You are a tennis live assistant named Phoenix. User asks: {user_message}. Provide accurate tennis live scores, updates or upcoming matches information in Telugu or English as requested."
         
-        # సరికొత్త google-genai SDK కోసం మోడల్ పేరు
         response = client.models.generate_content(
             model="gemini-1.5-flash",
             contents=prompt,
@@ -80,4 +77,4 @@ def chat():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=10000)
-    
+        
