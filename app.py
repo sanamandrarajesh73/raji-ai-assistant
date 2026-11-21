@@ -246,8 +246,68 @@ def run_ai_brain(user_id, user_text, mood="neutral", current_time=None):
     return reply
 
 
-@app.route("/", methods=["GET"])
+def extract_incoming_data():
+    if request.method == "GET":
+        src = request.args
+    else:
+        src = request.get_json(silent=True)
+        if not isinstance(src, dict) or not src:
+            src = request.form.to_dict() if request.form else {}
+
+    user_text = str(
+        src.get("message")
+        or src.get("prompt")
+        or src.get("text")
+        or src.get("query")
+        or src.get("q")
+        or src.get("input")
+        or ""
+    ).strip()
+
+    user_id = str(src.get("user_id") or src.get("userId") or "phoenix_user").strip() or "phoenix_user"
+    mood = str(src.get("mood") or src.get("voice_emotion") or src.get("emotion") or "neutral").strip() or "neutral"
+    current_time = src.get("current_time") or src.get("time")
+    return user_text, user_id, mood, current_time
+
+
+def handle_brain_request():
+    user_text, user_id, mood, current_time = extract_incoming_data()
+    if not user_text:
+        return jsonify({
+            "status": "error",
+            "reply": "దయచేసి ఏదైనా మెసేజ్ పంపండి.",
+            "response": "దయచేసి ఏదైనా మెసేజ్ పంపండి.",
+            "answer": "దయచేసి ఏదైనా మెసేజ్ పంపండి.",
+        }), 400
+
+    try:
+        reply = run_ai_brain(
+            user_id=user_id,
+            user_text=user_text,
+            mood=mood,
+            current_time=current_time,
+        )
+        return jsonify({
+            "status": "success",
+            "reply": reply,
+            "response": reply,
+            "answer": reply,
+        }), 200
+    except Exception as exc:
+        err_msg = f"Phoenix AI Error: {str(exc)}"
+        return jsonify({
+            "status": "error",
+            "reply": err_msg,
+            "response": err_msg,
+            "answer": err_msg,
+            "error": str(exc),
+        }), 500
+
+
+@app.route("/", methods=["GET", "POST"])
 def home():
+    if request.method == "POST":
+        return handle_brain_request()
     return jsonify({
         "status": "live",
         "app": "PHOENIX AI Brain",
@@ -261,44 +321,29 @@ def health():
     return jsonify({"status": "ok", "groq_key_set": bool(GROQ_API_KEY)}), 200
 
 
-@app.route("/chat", methods=["POST"])
-def chat_endpoint():
-    payload = request.get_json(silent=True) or {}
-    user_text = str(
-        payload.get("message")
-        or payload.get("prompt")
-        or payload.get("text")
-        or ""
-    ).strip()
+@app.route("/chat", methods=["GET", "POST"])
+@app.route("/ask", methods=["GET", "POST"])
+@app.route("/api/chat", methods=["GET", "POST"])
+@app.route("/api/ask", methods=["GET", "POST"])
+@app.route("/generate", methods=["GET", "POST"])
+@app.route("/phoenix", methods=["GET", "POST"])
+@app.route("/brain", methods=["GET", "POST"])
+@app.route("/v1/chat", methods=["GET", "POST"])
+def chat_routes():
+    return handle_brain_request()
 
-    if not user_text:
-        return jsonify({
-            "status": "error",
-            "reply": "దయచేసి ఏదైనా మెసేజ్ పంపండి.",
-        }), 400
 
-    user_id = str(payload.get("user_id") or payload.get("userId") or "phoenix_user")
-    mood = str(payload.get("mood") or payload.get("voice_emotion") or "neutral")
-    current_time = payload.get("current_time") or payload.get("time")
-
-    try:
-        reply = run_ai_brain(
-            user_id=user_id,
-            user_text=user_text,
-            mood=mood,
-            current_time=current_time,
-        )
-        return jsonify({
-            "status": "success",
-            "reply": reply,
-            "response": reply,
-        }), 200
-    except Exception as exc:
-        return jsonify({
-            "status": "error",
-            "reply": f"Phoenix AI Error: {str(exc)}",
-            "error": str(exc),
-        }), 500
+@app.errorhandler(404)
+def not_found_handler(error):
+    # ఏదైనా మెసేజ్/ప్రాంప్ట్ పారామీటర్ తో unknown పాత్ కి వచ్చినా బ్రెయిన్ ద్వారా స్పందించేలా ప్రయత్నిస్తుంది
+    user_text, _, _, _ = extract_incoming_data()
+    if user_text:
+        return handle_brain_request()
+    return jsonify({
+        "status": "not_found",
+        "reply": "not found",
+        "message": "Endpoint not found. Use /chat or /ask with {'message': 'your text'}.",
+    }), 404
 
 
 if __name__ == "__main__":
