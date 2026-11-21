@@ -14,8 +14,9 @@ CORS(app)
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
 GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
 
-REASONING_MODEL = os.environ.get("GROQ_REASONING_MODEL", "llama-3.3-70b-versatile").strip()
-EXTRACTOR_MODEL = os.environ.get("GROQ_EXTRACTOR_MODEL", "llama-3.1-8b-instant").strip()
+# Groq లో యాక్టివ్ ప్రొడక్షన్ మోడల్స్
+REASONING_MODEL = os.environ.get("GROQ_REASONING_MODEL", "openai/gpt-oss-120b").strip()
+EXTRACTOR_MODEL = os.environ.get("GROQ_EXTRACTOR_MODEL", "openai/gpt-oss-20b").strip()
 
 DB_PATH = os.environ.get("BRAIN_DB_PATH", "phoenix_brain.db").strip()
 DB_LOCK = threading.Lock()
