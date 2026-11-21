@@ -255,10 +255,10 @@ def extract_incoming_data():
             src = request.form.to_dict() if request.form else {}
 
     user_text = str(
-        src.get("message")
+        src.get("query")
+        or src.get("message")
         or src.get("prompt")
         or src.get("text")
-        or src.get("query")
         or src.get("q")
         or src.get("input")
         or ""
@@ -321,6 +321,7 @@ def health():
     return jsonify({"status": "ok", "groq_key_set": bool(GROQ_API_KEY)}), 200
 
 
+@app.route("/run", methods=["GET", "POST"])
 @app.route("/chat", methods=["GET", "POST"])
 @app.route("/ask", methods=["GET", "POST"])
 @app.route("/api/chat", methods=["GET", "POST"])
@@ -331,19 +332,6 @@ def health():
 @app.route("/v1/chat", methods=["GET", "POST"])
 def chat_routes():
     return handle_brain_request()
-
-
-@app.errorhandler(404)
-def not_found_handler(error):
-    # ఏదైనా మెసేజ్/ప్రాంప్ట్ పారామీటర్ తో unknown పాత్ కి వచ్చినా బ్రెయిన్ ద్వారా స్పందించేలా ప్రయత్నిస్తుంది
-    user_text, _, _, _ = extract_incoming_data()
-    if user_text:
-        return handle_brain_request()
-    return jsonify({
-        "status": "not_found",
-        "reply": "not found",
-        "message": "Endpoint not found. Use /chat or /ask with {'message': 'your text'}.",
-    }), 404
 
 
 if __name__ == "__main__":
