@@ -66,18 +66,27 @@ init_db()
 
 def clean_text_for_app(text):
     if not text:
-        return ""
-    text = str(text)
-    # Markdown bold/italic/code symbols తొలగించడం
-    text = re.sub(r"\*\*(.*?)\*\*", r"\1", text)
-    text = text.replace("**", "").replace("__", "").replace("`", "")
-    text = re.sub(r"^#{1,6}\s*", "", text, flags=re.MULTILINE)
-    # వింత నాన్-ASCII/అన్‌సపోర్టెడ్ సింబల్స్ (ఫోన్‌లో బాక్సులు వచ్చేవి) తొలగించడం
-    text = re.sub(r"[^\w\s\u0C00-\u0C7F.,!?():;/\-–—'\"%+=@#&]", "", text)
-    # అదనపు ఖాళీలు/లైన్లు సరిచేయడం
-    text = re.sub(r"[ \t]+", " ", text)
-    text = re.sub(r"\n{3,}", "\n\n", text)
-    return text.strip()
+        return "చెప్పండి రాజేష్, నేను పూర్తి శక్తితో సిద్ధంగా ఉన్నాను. ఇప్పుడు ఏం చేయమంటారు రాజేష్?"
+    s = str(text)
+    # Escaped newlines ను అసలు newline గా మార్చడం (బొమ్మల ఆకారం చెడిపోకుండా ఉండటానికి)
+    s = s.replace("\\r\\n", "\n").replace("\\n", "\n").replace("\\r", "\n").replace("\\t", " ")
+    s = s.replace("\r\n", "\n").replace("\r", "\n").replace("\t", " ")
+    # Markdown bold/headings తొలగించడం (కానీ * - / \ | _ + = లాంటి డ్రాయింగ్ అక్షరాలను ఉంచడం)
+    s = re.sub(r"\*\*(.*?)\*\*", r"\1", s)
+    s = s.replace("__", "").replace("```", "").replace("`", "")
+    s = re.sub(r"^#{1,6}\s*", "", s, flags=re.MULTILINE)
+    # తెలుగు అక్షరాలు, ఇంగ్లీష్, అంకెలు, మరియు ASCII డ్రాయింగ్ చిహ్నాలు మాత్రమే ఉంచడం
+    s = re.sub(r"[^\w\s\n\u0C00-\u0C7F.,!?():;/\\|\-_+*=@#&'\"%<>^~]", " ", s)
+    # ప్రతి లైన్‌ను శుభ్రం చేస్తూ, డ్రాయింగ్ కోసం ముందుండే స్పేస్‌లను కాపాడటం
+    cleaned_lines = []
+    for line in s.split("\n"):
+        line_clean = line.rstrip()
+        cleaned_lines.append(line_clean)
+    s = "\n".join(cleaned_lines)
+    s = re.sub(r"\n{3,}", "\n\n", s).strip()
+    if not s:
+        return "చెప్పండి రాజేష్, మీ కోసం ఎప్పుడూ సిద్ధంగా ఉన్నాను. ఇప్పుడు ఏం చేయమంటారు రాజేష్?"
+    return s
 
 
 def get_active_groq_models():
@@ -119,7 +128,7 @@ def get_active_groq_models():
         return list(_CACHED_MODELS)
 
 
-def call_groq_direct(messages, temperature=0.5, max_tokens=450, json_mode=False):
+def call_groq_direct(messages, temperature=0.45, max_tokens=360, json_mode=False):
     if not GROQ_API_KEY:
         raise RuntimeError("GROQ_API_KEY is not set in Render Environment.")
 
@@ -298,8 +307,8 @@ def run_phoenix_brain(user_id, user_text, mood="neutral", current_time=None):
     memory_text = "\n".join(f"- {m}" for m in memories) if memories else "- ఇంకా ప్రత్యేక జ్ఞాపకాలు లేవు."
 
     system_prompt = f"""
-నీవు PHOENIX యాప్‌లోని సహాయకుడివి.
-యూజర్‌తో సహజమైన, రోజువారీ మాట్లాడే తెలుగులో (లేదా యూజర్ ఏ భాషలో అడిగితే ఆ భాషలో) స్పష్టంగా, నీట్‌గా, స్నేహపూర్వకంగా సమాధానం ఇవ్వు.
+నీవు PHOENIX యాప్‌లోని అత్యంత శక్తివంతమైన జార్విస్ (JARVIS) లాంటి సహాయకుడివి.
+నీ యూజర్ పేరు రాజేష్. అతని కోసం ఎప్పుడూ చురుగ్గా, నమ్మకంగా, ఆప్యాయంగా, పవర్‌ఫుల్‌గా పనిచేసే పర్సనల్ అసిస్టెంట్‌వి.
 
 [జ్ఞాపకాలు]
 {memory_text}
@@ -308,11 +317,12 @@ def run_phoenix_brain(user_id, user_text, mood="neutral", current_time=None):
 - సమయం: {current_time}
 - యూజర్ మూడ్: {mood}
 
-[నియమాలు]
-1. కృత్రిమంగా, పుస్తకపు పదాలు ("శాస్త్రం", "విజ్ఞానశాస్త్రం" లాంటివి అనవసరంగా) వాడకుండా సహజమైన తెలుగులో మాట్లాడు.
-2. సమాధానం చాలా పొడవుగా కాకుండా, సూటిగా, స్పష్టంగా, నీట్‌గా ఉండేలా రాయ్.
-3. స్టార్ గుర్తులు (**), హ్యాష్‌లు (#), బుల్లెట్ గుర్తులు లేదా వింత సింబల్స్ వాడకు. సాదా, నీట్ వాక్యాలుగా రాయ్.
-4. యూజర్ అడిగిన ప్రశ్నకు నేరుగా, ఉపయోగకరంగా సమాధానం ఇవ్వు.
+[జార్విస్ నియమాలు]
+1. రాజేష్‌తో మాట్లాడేటప్పుడు సహజమైన, రోజువారీ మాట్లాడే తెలుగులో (లేదా రాజేష్ ఏ భాషలో అడిగితే ఆ భాషలో) పవర్‌ఫుల్‌గా, క్లియర్‌గా, స్నేహపూర్వకంగా సమాధానం ఇవ్వు.
+2. సమాధానంలో రాజేష్‌ని గౌరవంగా, ఆప్యాయంగా పలకరించు. ఉదాహరణకు "చెప్పండి రాజేష్", "ఇప్పుడు ఏం చేయమంటారు రాజేష్" లాంటి సహజమైన శైలిని ఉపయోగించు.
+3. సాధారణ ప్రశ్నలకు 3-4 చిన్న వాక్యాల్లో సూటిగా, నీట్‌గా సమాధానం ఇవ్వు. కృత్రిమంగా, పుస్తకపు పదాలు ("శాస్త్రం", "విజ్ఞానశాస్త్రం") వాడకు.
+4. డ్రాయింగ్ / బొమ్మ / సింబల్ రూల్: ఎవరైనా ఏదైనా బొమ్మ గీయమని లేదా సింబల్ (హార్ట్, స్టార్, ఇల్లు, పువ్వు, ఆకారాలు) చూపించమని అడిగితే, ముందుగా ఇంగ్లీష్ అక్షరాలు (A, B, C, O, V, M) లేదా అంకెలు (1, 2, 3) మరియు సాధారణ గీతలతో (*, -, /, \, |) చిన్న, స్పష్టమైన చేతి గీతల నమూనా బొమ్మ (ASCII Sketch) గీసి చూపించు. ఆ తర్వాత దాన్ని పేపర్ మీద చేత్తో సులభంగా ఎలా గీయాలో 2-3 చిన్న స్టెప్స్‌లో చెప్పు.
+5. మార్క్‌డౌన్ స్టార్ గుర్తులు (**), హ్యాష్‌లు (#), కోడ్ బ్లాక్‌లు (```) అసలు వాడకు.
 """.strip()
 
     messages = [{"role": "system", "content": system_prompt}]
@@ -323,7 +333,7 @@ def run_phoenix_brain(user_id, user_text, mood="neutral", current_time=None):
     reply = call_groq_direct(
         messages=messages,
         temperature=0.45,
-        max_tokens=450,
+        max_tokens=360,
         json_mode=False,
     )
 
@@ -380,7 +390,7 @@ def build_response(reply_text):
         "result": clean_reply,
         "output": clean_reply,
         "content": clean_reply,
-        "data": {"reply": clean_reply, "text": clean_reply},
+        "data": clean_reply,
     }), 200
 
 
@@ -398,7 +408,7 @@ def handle_brain_request():
         )
         return build_response(reply)
     except Exception as exc:
-        err_reply = clean_text_for_app(f"నమస్తే రాజేష్! ఇప్పుడు చిన్న సమస్య వచ్చింది: {str(exc)[:160]}")
+        err_reply = clean_text_for_app(f"చెప్పండి రాజేష్, ఇప్పుడు చిన్న సమస్య వచ్చింది: {str(exc)[:150]}")
         return build_response(err_reply)
 
 
@@ -438,3 +448,4 @@ def chat_routes():
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
+            
