@@ -4,7 +4,7 @@ import sqlite3
 import threading
 from datetime import datetime, timezone
 import requests
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, Response
 from flask_cors import CORS
 
 app = Flask(__name__)
@@ -13,7 +13,7 @@ CORS(app)
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
 GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
 
-FALLBACK_MODELS = [
+REASONING_MODELS = [
     m.strip() for m in [
         os.environ.get("GROQ_REASONING_MODEL", ""),
         "llama-3.3-70b-versatile",
@@ -68,16 +68,16 @@ def init_db():
 init_db()
 
 
-def call_groq_with_fallback(messages, models, temperature=0.55, max_tokens=700, json_mode=False):
+def call_groq_direct(messages, models, temperature=0.55, max_tokens=700, json_mode=False):
     if not GROQ_API_KEY:
-        return "నమస్తే రాజేష్! సర్వర్‌లో GROQ_API_KEY సెట్ చేయాలి—అది సెట్ చేస్తే నేను వెంటనే ఫుల్ స్పీడ్‌లో మాట్లాడతాను."
+        raise RuntimeError("GROQ_API_KEY is not set in Render Environment.")
 
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json",
     }
 
-    last_error = ""
+    errors = []
     seen = set()
     for model in models:
         if model in seen:
@@ -102,12 +102,11 @@ def call_groq_with_fallback(messages, models, temperature=0.55, max_tokens=700, 
                     content = (choices[0].get("message", {}).get("content") or "").strip()
                     if content:
                         return content
-            else:
-                last_error = f"{model} -> HTTP {resp.status_code}: {resp.text[:160]}"
+            errors.append(f"{model}: HTTP {resp.status_code} - {resp.text[:150]}")
         except Exception as exc:
-            last_error = f"{model} -> {str(exc)[:160]}"
+            errors.append(f"{model}: {str(exc)[:150]}")
 
-    return f"క్షమించండి రాజేష్, ఇప్పుడే Groq సర్వర్ నుండి సమాధానం రావడంలో చిన్న సమస్య వచ్చింది ({last_error}). ఒక్కసారి మళ్లీ ప్రయత్నించండి."
+    raise RuntimeError(" | ".join(errors) if errors else "Groq API failed.")
 
 
 def get_short_term_history(user_id, limit=8):
@@ -219,7 +218,7 @@ def background_extract_facts(user_id, user_text, assistant_reply):
             "యూజర్ సంభాషణ నుండి భవిష్యత్తులో గుర్తుంచుకోవాల్సిన ముఖ్యమైన విషయాలు మాత్రమే తీయండి. "
             'JSON మాత్రమే ఇవ్వండి: {"memories": [{"category": "preference|goal|project|habit|key_fact", "fact": "చిన్న వాక్యం"}]}'
         )
-        raw_json = call_groq_with_fallback(
+        raw_json = call_groq_direct(
             messages=[
                 {"role": "system", "content": extractor_prompt},
                 {"role": "user", "content": f"User: {user_text}\nAssistant: {assistant_reply}"},
@@ -237,7 +236,7 @@ def background_extract_facts(user_id, user_text, assistant_reply):
         print(f"[Background Extractor Warning]: {exc}")
 
 
-def run_ai_brain(user_id, user_text, mood="neutral", current_time=None):
+def run_phoenix_brain(user_id, user_text, mood="neutral", current_time=None):
     if not current_time:
         current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
@@ -246,8 +245,8 @@ def run_ai_brain(user_id, user_text, mood="neutral", current_time=None):
     memory_text = "\n".join(f"- {m}" for m in memories) if memories else "- ఇంకా ప్రత్యేక జ్ఞాపకాలు లేవు."
 
     system_prompt = f"""
-నీవు PHOENIX యాప్‌లోని అత్యంత ఇంటిలిజెంట్, శక్తివంతమైన AI బ్రెయిన్.
-యూజర్ మాట్లాడే భాషకు తగ్గట్టుగా (ముఖ్యంగా సహజమైన తెలుగులో లేదా యూజర్ అడిగిన భాషలో) స్పష్టంగా, ఆప్యాయంగా, ఆచరణాత్మకంగా సమాధానం ఇవ్వు.
+నీవు PHOENIX యాప్‌లోని అత్యంత ఇంటిలిజెంట్ AI బ్రెయిన్.
+యూజర్ మాట్లాడే భాషకు తగ్గట్టుగా (ముఖ్యంగా సహజమైన తెలుగులో లేదా యూజర్ అడిగిన భాషలో) స్పష్టంగా, ఆప్యాయంగా, సూటిగా సమాధానం ఇవ్వు.
 
 [Long-Term Memory]
 {memory_text}
@@ -257,9 +256,9 @@ def run_ai_brain(user_id, user_text, mood="neutral", current_time=None):
 - యూజర్ మూడ్: {mood}
 
 [నియమాలు]
-1. యూజర్ ప్రశ్న, మూడ్, సందర్భాన్ని బట్టి సహజంగా, స్పష్టంగా మాట్లాడు.
-2. Long-Term Memory లోని విషయాలను అవసరమైనప్పుడు మాత్రమే ఉపయోగించు.
-3. సమాధానం పొడవైన ఉపన్యాసంలా కాకుండా సూటిగా, ఉపయోగకరంగా ఉండాలి.
+1. యూజర్ ప్రశ్న, మూడ్, సందర్భాన్ని బట్టి స్పష్టమైన, ఉపయోగకరమైన సమాధానం ఇవ్వు.
+2. Long-Term Memory లోని అంశాలను అవసరమైనప్పుడు మాత్రమే సహజంగా ఉపయోగించు.
+3. సమాధానం సులభంగా అర్థమయ్యేలా, సూటిగా ఉండాలి.
 """.strip()
 
     messages = [{"role": "system", "content": system_prompt}]
@@ -267,9 +266,9 @@ def run_ai_brain(user_id, user_text, mood="neutral", current_time=None):
         messages.append({"role": turn["role"], "content": turn["content"]})
     messages.append({"role": "user", "content": user_text})
 
-    reply = call_groq_with_fallback(
+    reply = call_groq_direct(
         messages=messages,
-        models=FALLBACK_MODELS,
+        models=REASONING_MODELS,
         temperature=0.55,
         max_tokens=700,
         json_mode=False,
@@ -311,34 +310,42 @@ def extract_incoming_data():
     return user_text, user_id, mood, current_time
 
 
-def format_app_payload(text):
+def build_response(reply_text):
+    wants_plain = str(request.args.get("format", "")).strip().lower() in ("text", "plain", "raw")
+    accept_header = str(request.headers.get("Accept", "")).lower()
+    if wants_plain or ("text/plain" in accept_header and "application/json" not in accept_header):
+        return Response(reply_text, status=200, mimetype="text/plain; charset=utf-8")
+
     return jsonify({
         "status": "success",
-        "reply": text,
-        "response": text,
-        "answer": text,
-        "message": text,
-        "text": text,
-        "result": text,
-        "output": text,
+        "reply": reply_text,
+        "response": reply_text,
+        "answer": reply_text,
+        "message": reply_text,
+        "text": reply_text,
+        "result": reply_text,
+        "output": reply_text,
+        "content": reply_text,
+        "data": {"reply": reply_text, "text": reply_text},
     }), 200
 
 
 def handle_brain_request():
     user_text, user_id, mood, current_time = extract_incoming_data()
     if not user_text:
-        return format_app_payload("నమస్తే రాజేష్! నేను PHOENIX ని. ఏదైనా అడుగు, నేను రెడీగా ఉన్నాను.")
+        user_text = "నమస్తే"
 
     try:
-        reply = run_ai_brain(
+        reply = run_phoenix_brain(
             user_id=user_id,
             user_text=user_text,
             mood=mood,
             current_time=current_time,
         )
-        return format_app_payload(reply)
+        return build_response(reply)
     except Exception as exc:
-        return format_app_payload(f"నమస్తే రాజేష్! ఇప్పుడు చిన్న సమస్య వచ్చింది: {str(exc)[:180]}")
+        err_reply = f"నమస్తే రాజేష్! Groq API కనెక్ట్ చేయడంలో ఇబ్బంది వచ్చింది: {str(exc)[:200]}"
+        return build_response(err_reply)
 
 
 @app.route("/", methods=["GET", "POST"])
