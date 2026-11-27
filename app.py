@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import sqlite3
 import threading
@@ -63,6 +64,22 @@ def init_db():
 init_db()
 
 
+def clean_text_for_app(text):
+    if not text:
+        return ""
+    text = str(text)
+    # Markdown bold/italic/code symbols తొలగించడం
+    text = re.sub(r"\*\*(.*?)\*\*", r"\1", text)
+    text = text.replace("**", "").replace("__", "").replace("`", "")
+    text = re.sub(r"^#{1,6}\s*", "", text, flags=re.MULTILINE)
+    # వింత నాన్-ASCII/అన్‌సపోర్టెడ్ సింబల్స్ (ఫోన్‌లో బాక్సులు వచ్చేవి) తొలగించడం
+    text = re.sub(r"[^\w\s\u0C00-\u0C7F.,!?():;/\-–—'\"%+=@#&]", "", text)
+    # అదనపు ఖాళీలు/లైన్లు సరిచేయడం
+    text = re.sub(r"[ \t]+", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
 def get_active_groq_models():
     global _CACHED_MODELS
     if not GROQ_API_KEY:
@@ -102,7 +119,7 @@ def get_active_groq_models():
         return list(_CACHED_MODELS)
 
 
-def call_groq_direct(messages, temperature=0.55, max_tokens=700, json_mode=False):
+def call_groq_direct(messages, temperature=0.5, max_tokens=450, json_mode=False):
     if not GROQ_API_KEY:
         raise RuntimeError("GROQ_API_KEY is not set in Render Environment.")
 
@@ -132,7 +149,7 @@ def call_groq_direct(messages, temperature=0.55, max_tokens=700, json_mode=False
                 if choices:
                     content = (choices[0].get("message", {}).get("content") or "").strip()
                     if content:
-                        return content
+                        return content if json_mode else clean_text_for_app(content)
             else:
                 err_txt = resp.text[:160]
                 errors.append(f"{model}: HTTP {resp.status_code} - {err_txt}")
@@ -146,7 +163,7 @@ def call_groq_direct(messages, temperature=0.55, max_tokens=700, json_mode=False
     raise RuntimeError(" | ".join(errors[-2:]) if errors else "Groq API failed.")
 
 
-def get_short_term_history(user_id, limit=8):
+def get_short_term_history(user_id, limit=6):
     try:
         with DB_LOCK:
             conn = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -186,7 +203,7 @@ def save_message(user_id, role, content, mood="neutral"):
         print(f"[Save Message Warning]: {exc}")
 
 
-def get_relevant_memories(user_id, query="", limit=10):
+def get_relevant_memories(user_id, query="", limit=8):
     try:
         with DB_LOCK:
             conn = sqlite3.connect(DB_PATH, check_same_thread=False)
@@ -195,7 +212,7 @@ def get_relevant_memories(user_id, query="", limit=10):
                 """
                 SELECT category, fact FROM user_memories
                 WHERE user_id = ?
-                ORDER BY id DESC LIMIT 40
+                ORDER BY id DESC LIMIT 30
                 """,
                 (user_id,),
             )
@@ -214,7 +231,7 @@ def get_relevant_memories(user_id, query="", limit=10):
             ranked.append((score, cat, fact))
 
         ranked.sort(key=lambda item: item[0], reverse=True)
-        return [f"[{cat}] {fact}" for _, cat, fact in ranked[:limit]]
+        return [f"{fact}" for _, _, fact in ranked[:limit]]
     except Exception:
         return []
 
@@ -227,10 +244,10 @@ def save_extracted_facts(user_id, facts_list):
             cur = conn.cursor()
             for item in facts_list:
                 if isinstance(item, dict):
-                    fact = str(item.get("fact", "")).strip()
+                    fact = clean_text_for_app(str(item.get("fact", "")))
                     category = str(item.get("category", "general")).strip() or "general"
                 else:
-                    fact = str(item).strip()
+                    fact = clean_text_for_app(str(item))
                     category = "general"
 
                 if fact:
@@ -261,7 +278,7 @@ def background_extract_facts(user_id, user_text, assistant_reply):
                 {"role": "user", "content": f"User: {user_text}\nAssistant: {assistant_reply}"},
             ],
             temperature=0.1,
-            max_tokens=250,
+            max_tokens=200,
             json_mode=True,
         )
         parsed = json.loads(raw_json)
@@ -277,14 +294,14 @@ def run_phoenix_brain(user_id, user_text, mood="neutral", current_time=None):
         current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     memories = get_relevant_memories(user_id, query=user_text)
-    history = get_short_term_history(user_id, limit=8)
+    history = get_short_term_history(user_id, limit=6)
     memory_text = "\n".join(f"- {m}" for m in memories) if memories else "- ఇంకా ప్రత్యేక జ్ఞాపకాలు లేవు."
 
     system_prompt = f"""
-నీవు PHOENIX యాప్‌లోని అత్యంత ఇంటిలిజెంట్ AI బ్రెయిన్.
-యూజర్ మాట్లాడే భాషకు తగ్గట్టుగా (ముఖ్యంగా సహజమైన తెలుగులో లేదా యూజర్ అడిగిన భాషలో) స్పష్టంగా, ఆప్యాయంగా, సూటిగా సమాధానం ఇవ్వు.
+నీవు PHOENIX యాప్‌లోని సహాయకుడివి.
+యూజర్‌తో సహజమైన, రోజువారీ మాట్లాడే తెలుగులో (లేదా యూజర్ ఏ భాషలో అడిగితే ఆ భాషలో) స్పష్టంగా, నీట్‌గా, స్నేహపూర్వకంగా సమాధానం ఇవ్వు.
 
-[Long-Term Memory]
+[జ్ఞాపకాలు]
 {memory_text}
 
 [సందర్భం]
@@ -292,9 +309,10 @@ def run_phoenix_brain(user_id, user_text, mood="neutral", current_time=None):
 - యూజర్ మూడ్: {mood}
 
 [నియమాలు]
-1. యూజర్ ప్రశ్న, మూడ్, సందర్భాన్ని బట్టి స్పష్టమైన, ఉపయోగకరమైన సమాధానం ఇవ్వు.
-2. Long-Term Memory లోని అంశాలను అవసరమైనప్పుడు మాత్రమే సహజంగా ఉపయోగించు.
-3. సమాధానం సులభంగా అర్థమయ్యేలా, సూటిగా ఉండాలి.
+1. కృత్రిమంగా, పుస్తకపు పదాలు ("శాస్త్రం", "విజ్ఞానశాస్త్రం" లాంటివి అనవసరంగా) వాడకుండా సహజమైన తెలుగులో మాట్లాడు.
+2. సమాధానం చాలా పొడవుగా కాకుండా, సూటిగా, స్పష్టంగా, నీట్‌గా ఉండేలా రాయ్.
+3. స్టార్ గుర్తులు (**), హ్యాష్‌లు (#), బుల్లెట్ గుర్తులు లేదా వింత సింబల్స్ వాడకు. సాదా, నీట్ వాక్యాలుగా రాయ్.
+4. యూజర్ అడిగిన ప్రశ్నకు నేరుగా, ఉపయోగకరంగా సమాధానం ఇవ్వు.
 """.strip()
 
     messages = [{"role": "system", "content": system_prompt}]
@@ -304,8 +322,8 @@ def run_phoenix_brain(user_id, user_text, mood="neutral", current_time=None):
 
     reply = call_groq_direct(
         messages=messages,
-        temperature=0.55,
-        max_tokens=700,
+        temperature=0.45,
+        max_tokens=450,
         json_mode=False,
     )
 
@@ -346,22 +364,23 @@ def extract_incoming_data():
 
 
 def build_response(reply_text):
+    clean_reply = clean_text_for_app(reply_text)
     wants_plain = str(request.args.get("format", "")).strip().lower() in ("text", "plain", "raw")
     accept_header = str(request.headers.get("Accept", "")).lower()
     if wants_plain or ("text/plain" in accept_header and "application/json" not in accept_header):
-        return Response(reply_text, status=200, mimetype="text/plain; charset=utf-8")
+        return Response(clean_reply, status=200, mimetype="text/plain; charset=utf-8")
 
     return jsonify({
         "status": "success",
-        "reply": reply_text,
-        "response": reply_text,
-        "answer": reply_text,
-        "message": reply_text,
-        "text": reply_text,
-        "result": reply_text,
-        "output": reply_text,
-        "content": reply_text,
-        "data": {"reply": reply_text, "text": reply_text},
+        "reply": clean_reply,
+        "response": clean_reply,
+        "answer": clean_reply,
+        "message": clean_reply,
+        "text": clean_reply,
+        "result": clean_reply,
+        "output": clean_reply,
+        "content": clean_reply,
+        "data": {"reply": clean_reply, "text": clean_reply},
     }), 200
 
 
@@ -379,7 +398,7 @@ def handle_brain_request():
         )
         return build_response(reply)
     except Exception as exc:
-        err_reply = f"నమస్తే రాజేష్! ఇప్పుడు చిన్న సమస్య వచ్చింది: {str(exc)[:180]}"
+        err_reply = clean_text_for_app(f"నమస్తే రాజేష్! ఇప్పుడు చిన్న సమస్య వచ్చింది: {str(exc)[:160]}")
         return build_response(err_reply)
 
 
