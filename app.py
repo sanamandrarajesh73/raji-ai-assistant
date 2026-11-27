@@ -11,27 +11,22 @@ app = Flask(__name__)
 CORS(app)
 
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY", "").strip()
-GROQ_CHAT_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+GROQ_CHAT_URL = f"{GROQ_BASE_URL}/chat/completions"
+GROQ_MODELS_URL = f"{GROQ_BASE_URL}/models"
 
-REASONING_MODELS = [
-    m.strip() for m in [
-        os.environ.get("GROQ_REASONING_MODEL", ""),
-        "llama-3.3-70b-versatile",
-        "llama-3.1-8b-instant",
-        "gemma2-9b-it",
-    ] if m.strip()
-]
-
-EXTRACTOR_MODELS = [
-    m.strip() for m in [
-        os.environ.get("GROQ_EXTRACTOR_MODEL", ""),
-        "llama-3.1-8b-instant",
-        "llama-3.3-70b-versatile",
-    ] if m.strip()
+PREFERRED_MODELS = [
+    "openai/gpt-oss-120b",
+    "openai/gpt-oss-20b",
+    "qwen/qwen3-32b",
+    "meta-llama/llama-4-scout-17b-16e-instruct",
+    "meta-llama/llama-4-maverick-17b-128e-instruct",
 ]
 
 DB_PATH = os.environ.get("BRAIN_DB_PATH", "phoenix_brain.db").strip()
 DB_LOCK = threading.Lock()
+_CACHED_MODELS = []
+_MODELS_LOCK = threading.Lock()
 
 
 def init_db():
@@ -68,7 +63,46 @@ def init_db():
 init_db()
 
 
-def call_groq_direct(messages, models, temperature=0.55, max_tokens=700, json_mode=False):
+def get_active_groq_models():
+    global _CACHED_MODELS
+    if not GROQ_API_KEY:
+        return PREFERRED_MODELS
+
+    with _MODELS_LOCK:
+        if _CACHED_MODELS:
+            return list(_CACHED_MODELS)
+
+        discovered = []
+        try:
+            headers = {"Authorization": f"Bearer {GROQ_API_KEY}"}
+            resp = requests.get(GROQ_MODELS_URL, headers=headers, timeout=15)
+            if resp.status_code < 400:
+                items = (resp.json() or {}).get("data") or []
+                for item in items:
+                    mid = str(item.get("id", "")).strip()
+                    if not mid:
+                        continue
+                    low = mid.lower()
+                    if any(skip in low for skip in ("whisper", "tts", "playai", "guard", "embed", "moderation")):
+                        continue
+                    discovered.append(mid)
+        except Exception as exc:
+            print(f"[Models Discovery Warning]: {exc}")
+
+        ordered = []
+        for pref in PREFERRED_MODELS:
+            if not discovered or pref in discovered:
+                if pref not in ordered:
+                    ordered.append(pref)
+        for mid in discovered:
+            if mid not in ordered:
+                ordered.append(mid)
+
+        _CACHED_MODELS = ordered if ordered else list(PREFERRED_MODELS)
+        return list(_CACHED_MODELS)
+
+
+def call_groq_direct(messages, temperature=0.55, max_tokens=700, json_mode=False):
     if not GROQ_API_KEY:
         raise RuntimeError("GROQ_API_KEY is not set in Render Environment.")
 
@@ -77,13 +111,10 @@ def call_groq_direct(messages, models, temperature=0.55, max_tokens=700, json_mo
         "Content-Type": "application/json",
     }
 
+    models = get_active_groq_models()
     errors = []
-    seen = set()
-    for model in models:
-        if model in seen:
-            continue
-        seen.add(model)
 
+    for model in models:
         payload = {
             "model": model,
             "messages": messages,
@@ -102,11 +133,17 @@ def call_groq_direct(messages, models, temperature=0.55, max_tokens=700, json_mo
                     content = (choices[0].get("message", {}).get("content") or "").strip()
                     if content:
                         return content
-            errors.append(f"{model}: HTTP {resp.status_code} - {resp.text[:150]}")
+            else:
+                err_txt = resp.text[:160]
+                errors.append(f"{model}: HTTP {resp.status_code} - {err_txt}")
+                if resp.status_code == 404 or "does not exist" in err_txt.lower():
+                    global _CACHED_MODELS
+                    with _MODELS_LOCK:
+                        _CACHED_MODELS = [m for m in _CACHED_MODELS if m != model]
         except Exception as exc:
             errors.append(f"{model}: {str(exc)[:150]}")
 
-    raise RuntimeError(" | ".join(errors) if errors else "Groq API failed.")
+    raise RuntimeError(" | ".join(errors[-2:]) if errors else "Groq API failed.")
 
 
 def get_short_term_history(user_id, limit=8):
@@ -223,7 +260,6 @@ def background_extract_facts(user_id, user_text, assistant_reply):
                 {"role": "system", "content": extractor_prompt},
                 {"role": "user", "content": f"User: {user_text}\nAssistant: {assistant_reply}"},
             ],
-            models=EXTRACTOR_MODELS,
             temperature=0.1,
             max_tokens=250,
             json_mode=True,
@@ -268,7 +304,6 @@ def run_phoenix_brain(user_id, user_text, mood="neutral", current_time=None):
 
     reply = call_groq_direct(
         messages=messages,
-        models=REASONING_MODELS,
         temperature=0.55,
         max_tokens=700,
         json_mode=False,
@@ -344,7 +379,7 @@ def handle_brain_request():
         )
         return build_response(reply)
     except Exception as exc:
-        err_reply = f"నమస్తే రాజేష్! Groq API కనెక్ట్ చేయడంలో ఇబ్బంది వచ్చింది: {str(exc)[:200]}"
+        err_reply = f"నమస్తే రాజేష్! ఇప్పుడు చిన్న సమస్య వచ్చింది: {str(exc)[:180]}"
         return build_response(err_reply)
 
 
@@ -361,7 +396,11 @@ def home():
 
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "groq_key_set": bool(GROQ_API_KEY)}), 200
+    return jsonify({
+        "status": "ok",
+        "groq_key_set": bool(GROQ_API_KEY),
+        "models": get_active_groq_models()[:3],
+    }), 200
 
 
 @app.route("/run", methods=["GET", "POST"])
