@@ -89,6 +89,18 @@ def clean_text_for_app(text, fallback_name="మిత్రమా"):
     s = re.sub(r"\s+", " ", s).strip()
     if not s:
         return default_msg
+
+    refusal_cues = [
+        "ఆ అభ్యర్థనను నేను నెరవేర్చలేను",
+        "నెరవేర్చలేను",
+        "i cannot fulfill that request",
+        "i can't fulfill that request",
+    ]
+    if any(cue in s.lower() for cue in refusal_cues):
+        return (
+            f"చెప్పండి {fallback_name}, నేను నేరుగా ఫోటో ఫైల్ పంపలేను కానీ మీకు కావాల్సిన బొమ్మ లేదా విషయం గురించి "
+            f"సులభంగా అర్థమయ్యేలా తప్పకుండా సహాయం చేస్తాను. ఇప్పుడు ఏం చేయమంటారు {fallback_name}?"
+        )
     return s
 
 
@@ -162,6 +174,20 @@ def is_multi_choice_decision(text):
     return any(cue in text or cue in q_low for cue in choice_cues)
 
 
+def is_study_or_exam_query(text):
+    if not text:
+        return False
+    q_low = text.lower()
+    study_cues = [
+        "ecg", "qrs", "p wave", "t wave", "cath lab", "cardiology", "anatomy",
+        "physiology", "10th", "tenth", "inter", "ఇంటర్", "పరీక్ష", "ఎగ్జామ్",
+        "పాఠం", "లెసన్", "సిలబస్", "కోర్సు", "క్వశ్చన్", "ప్రశ్న", "diagram",
+        "lead placement", "technician", "diploma", "exam", "study", "lesson",
+        "question", "answer", "syllabus"
+    ]
+    return any(cue in text or cue in q_low for cue in study_cues)
+
+
 def get_active_groq_models():
     global _CACHED_MODELS
     if not GROQ_API_KEY:
@@ -201,7 +227,7 @@ def get_active_groq_models():
         return list(_CACHED_MODELS)
 
 
-def call_groq_direct(messages, temperature=0.45, max_tokens=360, json_mode=False, fallback_name="మిత్రమా"):
+def call_groq_direct(messages, temperature=0.4, max_tokens=450, json_mode=False, fallback_name="మిత్రమా"):
     if not GROQ_API_KEY:
         raise RuntimeError("GROQ_API_KEY is not set in Render Environment.")
 
@@ -382,11 +408,13 @@ def run_phoenix_brain(user_id, user_text, mood="neutral", current_time=None, exp
     user_name = get_user_display_name(user_id)
 
     q_low = user_text.lower()
-    if ("హాట్" in user_text or "హార్ట్" in user_text or "heart" in q_low) and (
-        "సింబల్" in user_text or "బొమ్మ" in user_text or "గీయ" in user_text or "చూపి" in user_text or "draw" in q_low
-    ):
+    is_heart_query = any(k in user_text for k in ("హాట్", "హార్ట్", "గుండె")) or ("heart" in q_low)
+    is_draw_query = any(k in user_text for k in ("సింబల్", "బొమ్మ", "గీయ", "చూపి", "డ్రాయింగ్", "వేసే")) or any(
+        k in q_low for k in ("draw", "drawing", "sketch", "picture")
+    )
+    if is_heart_query and is_draw_query:
         reply = clean_text_for_app(
-            f"చెప్పండి {user_name}, హార్ట్ బొమ్మను పేపర్ మీద సులభంగా గీయడానికి మూడు చిన్న స్టెప్స్: "
+            f"చెప్పండి {user_name}, నేను నేరుగా ఫోటో ఇమేజ్ గీయలేను కానీ హార్ట్ బొమ్మను పేపర్ మీద సులభంగా గీయడానికి మూడు చిన్న స్టెప్స్ చెబుతాను: "
             f"ఒకటి, పైన పక్కపక్కనే రెండు చిన్న గుండ్రని ఆర్చ్‌లు గీయండి. "
             f"రెండు, ఆ రెండు ఆర్చ్‌ల మధ్యలో చిన్న మలుపు ఇచ్చి, కిందికి వంపుగా రెండు గీతలు లాగండి. "
             f"మూడు, ఆ రెండు గీతలు కింద ఒక బిందువు వద్ద కలిసేలా గీస్తే నీట్ హార్ట్ రెడీ. "
@@ -401,16 +429,23 @@ def run_phoenix_brain(user_id, user_text, mood="neutral", current_time=None, exp
     history = get_short_term_history(user_id, limit=6)
     memory_text = "\n".join(f"- {m}" for m in memories) if memories else "- ఇంకా ప్రత్యేక జ్ఞాపకాలు లేవు."
 
+    study_mode = is_study_or_exam_query(user_text)
+    study_instructions = """
+[విద్యార్థి & ఎగ్జామ్ గైడ్ నియమాలు]
+విద్యార్థులు 10th క్లాస్ (2027 సిలబస్/ఎగ్జామ్స్), ఇంటర్ ఫస్ట్ ఇయర్, లేదా ఏదైనా కాలేజీ / పారామెడికల్ / డిప్లొమా కోర్సు (ఉదాహరణకు Cath Lab Technician, ECG, Cardiology, Anatomy, Science, Maths మొదలైనవి) గురించి అడిగినప్పుడు:
+1. ప్రశ్నకు కచ్చితమైన, తప్పులు లేని, పరీక్షలో రాయడానికి ఉపయోగపడే సమాధానం ఇవ్వు.
+2. డయాగ్రామ్ లేదా Lead Placement / Waves (P, QRS, T, V1-V6, Limb leads) గురించి అడిగితే, పేపర్ మీద ఆ డయాగ్రామ్ ఎలా గీయాలో, ఏ భాగం ఎక్కడ ఉంటుందో, దాని అర్థం ఏంటో స్పష్టంగా మాటల్లో విడమర్చి చెప్పు.
+3. వాక్యం మధ్యలో ఆగిపోకుండా, ముఖ్యమైన పాయింట్లన్నీ పూర్తయ్యేలా స్పష్టంగా, సులభంగా అర్థమయ్యే తెలుగు/ఇంగ్లీష్ పదాలతో (విద్యార్థి అడిగిన భాషకు అనుగుణంగా) వివరించు.
+""".strip() if study_mode else ""
+
     decision_mode = is_multi_choice_decision(user_text)
     decision_instructions = """
 [బహుళ ఎంపికల విశ్లేషణ నియమాలు]
-యూజర్ రెండు లేదా అంతకంటే ఎక్కువ ఎంపికల (క్రికెట్ టీమ్‌లు, వ్యాపార అవకాశాలు, పెట్టుబడి ఎంపికలు, జీవిత నిర్ణయాలు, కోర్సులు) మధ్య గందరగోళంలో ఉన్నప్పుడు ఈ క్రింది అంశాలను స్పష్టంగా, లోకజ్ఞానంతో, వివేకంతో వివరించు:
-1. అందుబాటులో ఉన్న సమాచారాన్ని ఆధారంగా చేసుకుని ప్రతి ఎంపికను విడివిడిగా విశ్లేషించు.
-2. యూజర్ భావోద్వేగం, అభిమానం లేదా తొందరపాటుకు, అసలు వాస్తవ సమాచారానికి మధ్య ఉన్న తేడాను స్పష్టంగా చూపించు.
-3. ఈ నిర్ణయంలో ఇంకా ఏ అంశాలు తెలియకుండా ఉన్నాయో (ఉదాహరణకు తాజా సమాచారం, వ్యక్తిగత బడ్జెట్, శక్తి, కాలపరిమితి) నిజాయితీగా చెప్పు.
-4. ప్రతి ఎంపిక వల్ల వచ్చే సాధ్యమైన ఫలితాలు, అలాగే ప్రమాదాలు లేదా నష్టాలను సమతుల్యంగా వివరించు.
-5. నిర్ణయం తీసుకునే ముందు యూజర్ ఆలోచించాల్సిన ముఖ్యమైన అంశాలను సూచించు.
-6. అత్యంత కఠిన నియమం: ఏ ఎంపిక ఎంచుకున్నా తప్పకుండా గెలుస్తుందని లేదా లాభమే వస్తుందని ఎప్పుడూ హామీ ఇవ్వకు. ఫలితం అనిశ్చితమని, తుది నిర్ణయం యూజర్ విచక్షణ మరియు పరిస్థితులపై ఆధారపడి ఉంటుందని స్పష్టంగా చెప్పు.
+యూజర్ రెండు లేదా అంతకంటే ఎక్కువ ఎంపికల మధ్య గందరగోళంలో ఉన్నప్పుడు:
+1. అందుబాటులో ఉన్న సమాచారం ఆధారంగా ప్రతి ఎంపికను విడివిడిగా విశ్లేషించు.
+2. భావోద్వేగం/అభిమానం vs వాస్తవ సమాచారం మధ్య తేడా చూపించు.
+3. ఇంకా తెలియని అంశాలు, సాధ్యమైన ఫలితాలు, రిస్క్‌లు, ఆలోచించాల్సిన అంశాలను స్పష్టంగా చెప్పు.
+4. ఏ ఎంపిక ఎంచుకున్నా 100% గెలుస్తుందని లేదా లాభమే వస్తుందని ఎప్పుడూ హామీ ఇవ్వకు.
 """.strip() if decision_mode else ""
 
     system_prompt = f"""
@@ -428,9 +463,12 @@ def run_phoenix_brain(user_id, user_text, mood="neutral", current_time=None, exp
 [జార్విస్ నియమాలు]
 1. సహజమైన, రోజువారీ మాట్లాడే తెలుగులో (లేదా యూజర్ ఏ భాషలో అడిగితే ఆ భాషలో—ఇంగ్లీష్, తమిళం, హిందీ, కన్నడతో సహా) పవర్‌ఫుల్‌గా, క్లియర్‌గా, స్నేహపూర్వకంగా సమాధానం ఇవ్వు.
 2. సమాధానంలో యూజర్‌ని {user_name} అని పిలుస్తూ, "చెప్పండి {user_name}", "ఇప్పుడు ఏం చేయమంటారు {user_name}" లాంటి సహజమైన జార్విస్ శైలిని ఉపయోగించు. (ఒకవేళ యూజర్ తన పేరు మార్చమని లేదా వేరే పేరు చెబితే, ఆ కొత్త పేరునే వాడు).
-3. సమాధానం చాలా పొడవుగా కాకుండా, సూటిగా, స్పష్టంగా, నీట్‌గా ఒకే పారాగ్రాఫ్‌లో ఉండేలా రాయ్.
-4. కృత్రిమంగా, పుస్తకపు పదాలు ("శాస్త్రం", "విజ్ఞానశాస్త్రం") లేదా స్టార్ గుర్తులు (**), హ్యాష్‌లు (#), ASCII బొమ్మలు అసలు వాడకు.
-5. ఏ విషయంలోనూ 100% గెలుపు లేదా లాభం వస్తుందని తప్పుడు హామీ ఇవ్వకు; వాస్తవాలు, రిస్క్‌లు, ఆలోచించాల్సిన అంశాలను నిజాయితీగా చూపించు.
+3. సమాధానం మధ్యలో వాక్యం కట్ అవ్వకుండా, ముఖ్యమైన విషయాలు పూర్తిగా అందేలా సూటిగా, స్పష్టంగా, నీట్‌గా ఒకే పారాగ్రాఫ్‌లో ఉండేలా రాయ్.
+4. "క్షమించండి, ఆ అభ్యర్థనను నేను నెరవేర్చలేను" లాంటి పొడి మాటలు వాడకు; ఏదైనా నేరుగా చేయలేనిదైనా సులభమైన ప్రత్యామ్నాయం లేదా గైడ్ ఇవ్వు.
+5. స్టార్ గుర్తులు (**), హ్యాష్‌లు (#), ASCII బొమ్మలు అసలు వాడకు.
+6. ఏ విషయంలోనూ 100% గెలుపు లేదా లాభం వస్తుందని తప్పుడు హామీ ఇవ్వకు.
+
+{study_instructions}
 
 {decision_instructions}
 """.strip()
@@ -442,8 +480,8 @@ def run_phoenix_brain(user_id, user_text, mood="neutral", current_time=None, exp
 
     reply = call_groq_direct(
         messages=messages,
-        temperature=0.45,
-        max_tokens=360 if decision_mode else 260,
+        temperature=0.35 if study_mode else 0.45,
+        max_tokens=650 if study_mode else (380 if decision_mode else 280),
         json_mode=False,
         fallback_name=user_name,
     )
