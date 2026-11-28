@@ -68,14 +68,11 @@ def clean_text_for_app(text):
     if not text:
         return "చెప్పండి రాజేష్, నేను పూర్తి శక్తితో సిద్ధంగా ఉన్నాను. ఇప్పుడు ఏం చేయమంటారు రాజేష్?"
     s = str(text)
-    # \n మరియు \r లను సాధారణ స్పేస్‌లుగా మార్చడం (ఫోన్ స్క్రీన్‌లో అక్షరాలు/లైన్లు గజిబిజి అవ్వకుండా)
     s = s.replace("\\r\\n", " ").replace("\\n", " ").replace("\\r", " ").replace("\\t", " ")
     s = s.replace("\r\n", " ").replace("\n", " ").replace("\r", " ").replace("\t", " ")
-    # Markdown గుర్తులు తొలగించడం
     s = re.sub(r"\*\*(.*?)\*\*", r"\1", s)
-    s = s.replace("**", "").replace("__", "").replace("```", "").replace("`", "")
-    s = re.sub(r"^#{1,6}\s*", "", s)
-    # తెలుగు అక్షరాలు, ఇంగ్లీష్, అంకెలు, సాధారణ విరామ చిహ్నాలు మాత్రమే ఉంచడం
+    s = s.replace("**", "").replace("__", "").replace("`", "")
+    s = re.sub(r"^#{1,6}\s*", "", s, flags=re.MULTILINE)
     s = re.sub(r"[^\w\s\u0C00-\uC7F.,!?():;/\-–—'\"%+=@#&]", " ", s)
     s = re.sub(r"\s+", " ", s).strip()
     if not s:
@@ -122,7 +119,7 @@ def get_active_groq_models():
         return list(_CACHED_MODELS)
 
 
-def call_groq_direct(messages, temperature=0.45, max_tokens=240, json_mode=False):
+def call_groq_direct(messages, temperature=0.5, max_tokens=300, json_mode=False):
     if not GROQ_API_KEY:
         raise RuntimeError("GROQ_API_KEY is not set in Render Environment.")
 
@@ -281,7 +278,7 @@ def background_extract_facts(user_id, user_text, assistant_reply):
                 {"role": "user", "content": f"User: {user_text}\nAssistant: {assistant_reply}"},
             ],
             temperature=0.1,
-            max_tokens=180,
+            max_tokens=200,
             json_mode=True,
         )
         parsed = json.loads(raw_json)
@@ -295,22 +292,6 @@ def background_extract_facts(user_id, user_text, assistant_reply):
 def run_phoenix_brain(user_id, user_text, mood="neutral", current_time=None):
     if not current_time:
         current_time = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-
-    q_low = user_text.lower()
-    # తెలుగులో "హాట్" అని అడిగితే Heart బొమ్మ/సింబల్ గురించే అని స్పష్టంగా గైడ్ చేయడం
-    if ("హాట్" in user_text or "హార్ట్" in user_text or "heart" in q_low) and (
-        "సింబల్" in user_text or "బొమ్మ" in user_text or "గీయ" in user_text or "చూపి" in user_text or "draw" in q_low
-    ):
-        reply = clean_text_for_app(
-            "చెప్పండి రాజేష్, హార్ట్ బొమ్మను పేపర్ మీద సులభంగా గీయడానికి మూడు చిన్న స్టెప్స్: "
-            "ఒకటి, పైన పక్కపక్కనే రెండు చిన్న గుండ్రని ఆర్చ్‌లు గీయండి. "
-            "రెండు, ఆ రెండు ఆర్చ్‌ల మధ్యలో చిన్న మలుపు ఇచ్చి, కిందికి వంపుగా రెండు గీతలు లాగండి. "
-            "మూడు, ఆ రెండు గీతలు కింద ఒక బిందువు వద్ద కలిసేలా గీస్తే నీట్ హార్ట్ రెడీ. "
-            "ఇప్పుడు ఏం చేయమంటారు రాజేష్?"
-        )
-        save_message(user_id, "user", user_text, mood=mood)
-        save_message(user_id, "assistant", reply, mood="helpful")
-        return reply
 
     memories = get_relevant_memories(user_id, query=user_text)
     history = get_short_term_history(user_id, limit=6)
@@ -329,10 +310,10 @@ def run_phoenix_brain(user_id, user_text, mood="neutral", current_time=None):
 
 [జార్విస్ నియమాలు]
 1. రాజేష్‌తో మాట్లాడేటప్పుడు సహజమైన, రోజువారీ మాట్లాడే తెలుగులో (లేదా రాజేష్ ఏ భాషలో అడిగితే ఆ భాషలో) పవర్‌ఫుల్‌గా, క్లియర్‌గా, స్నేహపూర్వకంగా సమాధానం ఇవ్వు.
-2. సమాధానంలో రాజేష్‌ని గౌరవంగా, ఆప్యాయంగా పలకరించు. ఉదాహరణకు "చెప్పండి రాజేష్", "ఇప్పుడు ఏం చేయమంటారు రాజేష్" లాంటి సహజమైన శైలిని ఉపయోగించు.
-3. సమాధానం చాలా పొడవుగా కాకుండా, సూటిగా, స్పష్టంగా, 3-4 చిన్న వాక్యాల్లో నీట్‌గా ఉండేలా రాయ్. ఒకే పారాగ్రాఫ్‌లో వరుసగా వచ్చేలా రాయ్, లైన్ బ్రేక్‌లు లేదా బుల్లెట్లు వాడకు.
-4. ASCII అక్షరాల బొమ్మలు (V, *, / వంటి వాటితో స్కెచ్‌లు) అసలు గీయకు — ఎందుకంటే ఫోన్ స్క్రీన్‌లో అవి ఆకారం చెడిపోయి కనిపిస్తాయి. బదులుగా చేత్తో సులభంగా ఎలా గీయాలో చిన్న మాటల్లో వివరిస్తే చాలు.
-5. కృత్రిమంగా, పుస్తకపు పదాలు ("శాస్త్రం", "విజ్ఞానశాస్త్రం") లేదా స్టార్ గుర్తులు (**), హ్యాష్‌లు (#) వాడకు.
+2. వీలైనంతవరకు సమాధానంలో రాజేష్‌ని గౌరవంగా, ఆప్యాయంగా పలకరించు. ఉదాహరణకు "చెప్పండి రాజేష్", "ఇప్పుడు ఏం చేయమంటారు రాజేష్" లాంటి సహజమైన శైలిని ఉపయోగించు.
+3. సమాధానం చాలా పొడవుగా కాకుండా, సూటిగా, స్పష్టంగా, 3-4 చిన్న వాక్యాల్లో నీట్‌గా ఉండేలా రాయ్.
+4. కృత్రిమంగా, పుస్తకపు పదాలు ("శాస్త్రం", "విజ్ఞానశాస్త్రం") వాడకు.
+5. స్టార్ గుర్తులు (**), హ్యాష్‌లు (#), బుల్లెట్ గుర్తులు లేదా వింత సింబల్స్ అసలు వాడకు.
 """.strip()
 
     messages = [{"role": "system", "content": system_prompt}]
@@ -342,8 +323,8 @@ def run_phoenix_brain(user_id, user_text, mood="neutral", current_time=None):
 
     reply = call_groq_direct(
         messages=messages,
-        temperature=0.45,
-        max_tokens=240,
+        temperature=0.5,
+        max_tokens=300,
         json_mode=False,
     )
 
