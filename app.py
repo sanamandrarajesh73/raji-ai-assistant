@@ -29,6 +29,9 @@ DB_LOCK = threading.Lock()
 _CACHED_MODELS = []
 _MODELS_LOCK = threading.Lock()
 
+TELUGU_START = chr(0x0C00)
+TELUGU_END = chr(0x0C7F)
+
 
 def init_db():
     try:
@@ -81,7 +84,8 @@ def clean_text_for_app(text, fallback_name="మిత్రమా"):
     s = re.sub(r"\*\*(.*?)\*\*", r"\1", s)
     s = s.replace("**", "").replace("__", "").replace("```", "").replace("`", "")
     s = re.sub(r"^#{1,6}\s*", "", s)
-    s = re.sub(r"[^\w\s\u0C00-\uC7F.,!?():;/\-–—'\"%+=@#&]", " ", s)
+    allowed_pattern = rf"[^\w\s{TELUGU_START}-{TELUGU_END}.,!?():;/\-–—'\"%+=@#&]"
+    s = re.sub(allowed_pattern, " ", s)
     s = re.sub(r"\s+", " ", s).strip()
     if not s:
         return default_msg
@@ -104,7 +108,8 @@ def get_user_display_name(user_id):
 
 
 def set_user_display_name(user_id, name):
-    cleaned = re.sub(r"[^\w\s\u0C00-\uC7F]", "", str(name or "")).strip()
+    name_clean_pattern = rf"[^\w\s{TELUGU_START}-{TELUGU_END}]"
+    cleaned = re.sub(name_clean_pattern, "", str(name or "")).strip()
     if not cleaned or len(cleaned) > 40:
         return
     try:
@@ -130,8 +135,8 @@ def maybe_extract_name_from_text(user_id, text):
     if not text:
         return
     patterns = [
-        r"(?:నా పేరు|నా పేరే|నన్ను)\s+([\u0C00-\uC7FA-Za-z]{2,25})(?:\s+అని\s+పిలువు|\s+అంటారు|\s+అండి|\s+అని|\s*$)",
-        r"(?:my name is|call me)\s+([A-Za-z\u0C00-\uC7F]{2,25})(?:\s|$|\.)",
+        rf"(?:నా పేరు|నా పేరే|నన్ను)\s+([{TELUGU_START}-{TELUGU_END}A-Za-z]{{2,25}})(?:\s+అని\s+పిలువు|\s+అంటారు|\s+అండి|\s+అని|\s*$)",
+        rf"(?:my name is|call me)\s+([A-Za-z{TELUGU_START}-{TELUGU_END}]{{2,25}})(?:\s|$|\.)",
     ]
     for pat in patterns:
         m = re.search(pat, text, flags=re.IGNORECASE)
